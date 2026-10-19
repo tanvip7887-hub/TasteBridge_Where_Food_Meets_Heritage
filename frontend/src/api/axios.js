@@ -5,8 +5,8 @@ const getBaseURL = () => {
   if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  if (typeof process !== "undefined" && process.env && process.env.VITE_API_BASE_URL) {
-    return process.env.VITE_API_BASE_URL;
+  if (globalThis.process?.env?.VITE_API_BASE_URL) {
+    return globalThis.process.env.VITE_API_BASE_URL;
   }
   return "http://localhost:5000/api/v1";
 };

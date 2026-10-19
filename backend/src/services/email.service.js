@@ -12,27 +12,30 @@ export const isSmtpConfigured = () => {
 };
 
 // Create Nodemailer Transporter
+export const buildSmtpTransportOptions = (config = env) => {
+  const host = config.SMTP_HOST;
+  const port = config.SMTP_PORT;
+  const isGmailSubmission = host?.toLowerCase() === "smtp.gmail.com" && Number(port) === 587;
+
+  return {
+    host,
+    port,
+    // Gmail on port 587 negotiates TLS with STARTTLS, rather than implicit TLS.
+    secure: isGmailSubmission ? false : config.SMTP_SECURE || Number(port) === 465,
+    ...(isGmailSubmission ? { requireTLS: true } : {}),
+    auth: {
+      user: config.SMTP_USER,
+      pass: config.SMTP_PASSWORD,
+    },
+  };
+};
+
 export const createTransporter = () => {
   if (!isSmtpConfigured()) {
     return null;
   }
 
-  const host = env.SMTP_HOST;
-  const port = env.SMTP_PORT;
-  const isSecure = env.SMTP_SECURE || port === 465;
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: isSecure,
-    auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASSWORD,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  });
+  return nodemailer.createTransport(buildSmtpTransportOptions());
 };
 
 // Verify SMTP connection (without sending test email)
@@ -302,10 +305,26 @@ export const sendPasswordResetOtpEmail = async ({
   }
 };
 
+// Modular email dispatcher for all transactional emails
+export const sendEmailJob = async (jobData) => {
+  if (jobData.type === "EMAIL_OTP" || jobData.type === "VERIFICATION_OTP") {
+    return await sendVerificationEmail(jobData);
+  }
+  if (jobData.type === "PASSWORD_RESET_OTP") {
+    return await sendPasswordResetOtpEmail(jobData);
+  }
+  if (jobData.type === "PASSWORD_RESET") {
+    return await sendPasswordResetEmail(jobData);
+  }
+  logger.warn(`[Email Service] Unrecognized email job type: ${jobData.type}. Falling back to sendVerificationEmail.`);
+  return await sendVerificationEmail(jobData);
+};
+
 export default {
   isSmtpConfigured,
   verifySmtpConnection,
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendPasswordResetOtpEmail,
+  sendEmailJob,
 };

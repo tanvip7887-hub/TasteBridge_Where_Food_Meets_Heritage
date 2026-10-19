@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import { useState, useEffect, useRef } from "react";
+import { useDispatch } from "react-redux";
 import { setLocation } from "../../store/locationSlice.js";
-import { mockAddresses } from "../../data/mockAddresses.js";
 import { X, MapPin, Crosshair, Loader2, Home } from "lucide-react";
 import axios from "axios";
 
@@ -163,18 +162,6 @@ export const LocationDrawer = ({ isOpen, onClose }) => {
     );
   };
 
-  const handleSelectSavedAddress = (addr) => {
-    dispatch(
-      setLocation({
-        shortName: addr.label || addr.shortName,
-        fullName: addr.fullAddress,
-        lat: addr.lat,
-        lon: addr.lon,
-      })
-    );
-    onClose();
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -277,26 +264,12 @@ export const LocationDrawer = ({ isOpen, onClose }) => {
             SAVED ADDRESSES
           </p>
 
-          <div className="space-y-3">
-            {mockAddresses.map((addr) => (
-              <div
-                key={addr.id}
-                onClick={() => handleSelectSavedAddress(addr)}
-                className="p-4 border border-gray-200 hover:border-red-600 transition-colors cursor-pointer group flex items-start gap-3 bg-white"
-              >
-                <div className="text-gray-600 group-hover:text-red-600 transition-colors mt-0.5">
-                  <Home className="w-5 h-5" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-gray-900 group-hover:text-red-600 transition-colors">
-                    {addr.label}
-                  </p>
-                  <p className="text-xs text-gray-500 leading-relaxed font-normal">
-                    {addr.fullAddress}
-                  </p>
-                </div>
-              </div>
-            ))}
+          <div className="p-4 rounded-xl bg-gray-50 border border-gray-200/80 text-center space-y-1">
+            <Home className="w-5 h-5 text-gray-400 mx-auto" />
+            <p className="text-xs font-semibold text-gray-700">No saved addresses</p>
+            <p className="text-[11px] text-gray-500">
+              Use GPS or search above to find home cooks in your area.
+            </p>
           </div>
         </div>
       </aside>

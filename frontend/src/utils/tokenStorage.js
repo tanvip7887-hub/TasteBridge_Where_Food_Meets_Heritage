@@ -1,4 +1,5 @@
 const TOKEN_KEY = "tastebridge_token";
+export { TOKEN_KEY };
 
 let inMemoryToken = null;
 

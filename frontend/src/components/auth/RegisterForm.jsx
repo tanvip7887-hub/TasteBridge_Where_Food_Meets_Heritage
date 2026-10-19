@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -28,7 +28,7 @@ const registerSchema = z
 
 export const RegisterForm = ({ onSuccess, onSwitchToLogin }) => {
   const dispatch = useDispatch();
-  const { loading } = useSelector((state) => state.auth);
+  const { registrationLoading } = useSelector((state) => state.auth);
   const [serverError, setServerError] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
 
@@ -42,7 +42,8 @@ export const RegisterForm = ({ onSuccess, onSwitchToLogin }) => {
 
   const onSubmit = async (data) => {
     setServerError("");
-    const { confirmPassword, ...payload } = data;
+    const payload = { ...data };
+    delete payload.confirmPassword;
 
     const result = await dispatch(registerUser(payload));
 
@@ -185,10 +186,10 @@ export const RegisterForm = ({ onSuccess, onSwitchToLogin }) => {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={registrationLoading}
           className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-medium text-sm rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
         >
-          {loading ? (
+          {registrationLoading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
               Sending Verification Code...

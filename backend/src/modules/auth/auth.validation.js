@@ -52,6 +52,12 @@ export const loginSchema = {
   }),
 };
 
+export const switchPortalSchema = {
+  body: z.object({
+    portal: z.enum(["CUSTOMER", "COOK", "DELIVERY_AGENT", "ADMIN"]),
+  }),
+};
+
 export const forgotPasswordSchema = {
   body: z.object({
     email: z

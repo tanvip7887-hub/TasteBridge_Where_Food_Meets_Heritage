@@ -1,7 +1,9 @@
-import React, { useRef, useState, useEffect } from "react";
-import { useSelector } from "react-redux";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { foodCategories } from "../data/foodCategories.js";
+import api from "../api/axios.js";
+import heroImage from "../assets/user_homepage.png";
+import { foodCategoryExploreHref } from "../utils/foodCategoryDiscovery.js";
+import { getRegionalCuisinePhoto } from "../utils/regionalCuisineImages.js";
 import {
   Sparkles,
   UtensilsCrossed,
@@ -10,203 +12,143 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  Shield,
-  User,
-  Bike,
-  Compass,
-  Package,
-  Heart,
-  UserCheck,
   BookOpen,
   Award,
+  Play,
 } from "lucide-react";
 
 export const HomePage = () => {
-  const { user } = useSelector((state) => state.auth);
-  const userFirstName = user?.name ? user.name.split(" ")[0] : "Food Explorer";
+  // Real Categories State from Backend API
+  const [categories, setCategories] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [categoriesError, setCategoriesError] = useState("");
+  const [categoryRetry, setCategoryRetry] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        setCategoriesError("");
+        const res = await api.get("/categories");
+        if (isMounted) {
+          setCategories(Array.isArray(res.data) ? res.data : []);
+        }
+      } catch {
+        if (isMounted) {
+          setCategories([]);
+          setCategoriesError("Regional categories could not be loaded. Please try again later.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingCategories(false);
+        }
+      }
+    };
+
+    fetchCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryRetry]);
 
   // Carousel Scroll State
-  const scrollRef = useRef(null);
+  const rowRefs = useRef([]);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
-  const checkScrollLimits = () => {
-    if (scrollRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+  const checkScrollLimits = useCallback(() => {
+    const row = rowRefs.current[0];
+    if (row) {
+      const { scrollLeft, scrollWidth, clientWidth } = row;
       setCanScrollLeft(scrollLeft > 5);
       setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 5);
     }
-  };
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      checkScrollLimits();
-      el.addEventListener("scroll", checkScrollLimits);
-      window.addEventListener("resize", checkScrollLimits);
-    }
-    return () => {
-      if (el) el.removeEventListener("scroll", checkScrollLimits);
-      window.removeEventListener("resize", checkScrollLimits);
-    };
   }, []);
 
+  useEffect(() => {
+    const rows = rowRefs.current.filter(Boolean);
+    checkScrollLimits();
+    rows.forEach((row) => row.addEventListener("scroll", checkScrollLimits));
+    window.addEventListener("resize", checkScrollLimits);
+    return () => {
+      rows.forEach((row) => row.removeEventListener("scroll", checkScrollLimits));
+      window.removeEventListener("resize", checkScrollLimits);
+    };
+  }, [categories, checkScrollLimits, loadingCategories]);
+
   const handleScroll = (direction) => {
-    if (scrollRef.current) {
-      const scrollAmount = direction === "left" ? -320 : 320;
-      scrollRef.current.scrollBy({
+    const scrollAmount = direction === "left" ? -320 : 320;
+    rowRefs.current.filter(Boolean).forEach((row) => {
+      row.scrollBy({
         left: scrollAmount,
         behavior: "smooth",
       });
-    }
-  };
-
-  const getRoleIcon = (role) => {
-    switch (role) {
-      case "ADMIN":
-        return <Shield className="w-5 h-5 text-amber-600" />;
-      case "COOK":
-        return <ChefHat className="w-5 h-5 text-red-600" />;
-      case "DELIVERY_AGENT":
-        return <Bike className="w-5 h-5 text-blue-600" />;
-      default:
-        return <User className="w-5 h-5 text-emerald-600" />;
-    }
+    });
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
-      {/* 1. WELCOME / ONBOARDING HERO BANNER (STATIC, NO VIDEO) */}
-      <section className="bg-white rounded-3xl p-6 sm:p-10 border border-orange-200/90 shadow-xs relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-        {/* Decorative Background Glow */}
-        <div className="absolute -top-12 -right-12 w-64 h-64 bg-orange-100/60 rounded-full blur-3xl pointer-events-none" />
+    <div className="w-full space-y-12 pb-8">
+      {/* Full-bleed homepage hero, below the 72px authenticated navbar. */}
+      <section className="relative isolate flex min-h-[calc(100svh-4.5rem)] w-full items-center justify-center overflow-hidden px-4 py-10 sm:px-6 lg:px-8">
+        <img
+          src={heroImage}
+          alt="A home-cooked meal shared around a table"
+          className="absolute inset-0 z-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/55 via-black/45 to-black/65" />
 
-        <div className="space-y-3 relative z-10 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" /> Welcome to TasteBridge
+        <div className="relative z-20 mx-auto w-full max-w-5xl space-y-5 text-center sm:space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-orange-100/40 bg-red-600/90 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-white shadow-sm">
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" /> Welcome to TasteBridge
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight leading-tight">
-            Welcome back, <span className="bg-gradient-to-r from-red-600 via-amber-600 to-orange-600 bg-clip-text text-transparent">{userFirstName}</span>
+          <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-white drop-shadow-md sm:text-6xl md:text-7xl">
+            Every dish has a story.
           </h1>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
-            What would you like to experience today?
-          </h2>
-          <p className="text-sm text-gray-600 leading-relaxed font-normal">
-            TasteBridge connects you with authentic home-cooked meals, local family dining experiences, and traditional cooking workshops passed down through generations.
+          <p className="mx-auto max-w-2xl text-base font-normal leading-relaxed text-gray-100 drop-shadow-sm sm:text-xl">
+            Order authentic home-cooked food, dine with local families, and discover recipes passed down through generations.
           </p>
-        </div>
 
-        {/* User Role & Session Card */}
-        <div className="relative z-10 w-full sm:w-auto px-5 py-4 bg-gray-50/90 border border-gray-200/80 rounded-2xl flex items-center justify-between sm:justify-start gap-4 shrink-0 shadow-xs">
-          <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center shadow-xs">
-            {getRoleIcon(user?.role)}
+          <div className="grid grid-cols-1 gap-3 pt-2 text-left sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+            {[
+              { title: "Order", description: "Home-cooked food delivered to your door", icon: UtensilsCrossed, to: "/explore" },
+              { title: "Dine", description: "Eat at a local family's home", icon: Users, to: "/explore?type=dining" },
+              { title: "Learn", description: "Join a cooking workshop with a home cook.", icon: ChefHat, to: "/explore?type=workshop" },
+              { title: "Stories", description: "Photos, cooking videos and recipes from home cooks.", icon: Play, to: "/stories" },
+            ].map(({ title, description, icon: Icon, to }) => (
+              to ? <Link
+                key={title}
+                to={to}
+                className="group flex min-h-[88px] items-center gap-4 rounded-2xl border border-white/50 bg-[#FFF8F0]/95 p-4 shadow-lg backdrop-blur-sm transition duration-200 hover:-translate-y-1 hover:bg-white hover:shadow-xl sm:min-h-[112px] sm:p-5"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-600 sm:h-12 sm:w-12">
+                  <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-bold text-gray-900 sm:text-lg">{title}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-gray-600 sm:text-sm">{description}</span>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 text-red-600 transition-transform group-hover:translate-x-1" />
+              </Link> : <div
+                key={title}
+                className="flex min-h-[88px] items-center gap-4 rounded-2xl border border-white/50 bg-[#FFF8F0]/95 p-4 shadow-lg backdrop-blur-sm sm:min-h-[112px] sm:p-5"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-600 sm:h-12 sm:w-12">
+                  <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-bold text-gray-900 sm:text-lg">{title}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-gray-600 sm:text-sm">{description}</span>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 text-red-600" />
+              </div>
+            ))}
           </div>
-          <div>
-            <p className="text-xs text-gray-500 font-medium">Session Active</p>
-            <p className="text-xs font-bold text-gray-900 leading-snug">
-              {user?.name || "Food Explorer"}
-            </p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full uppercase">
-                {user?.role || "CUSTOMER"}
-              </span>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">
-                {user?.status || "ACTIVE"}
-              </span>
-            </div>
-          </div>
+
         </div>
       </section>
 
-      {/* 2. THREE PRIMARY EXPERIENCE CARDS */}
-      <section className="space-y-6">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-bold text-gray-900">
-            Choose Your Culinary Experience
-          </h2>
-          <p className="text-sm text-gray-600">
-            Three ways to connect with authentic regional food and heritage home chefs.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1: ORDER */}
-          <Link
-            to="/explore?type=order"
-            className="group p-6 bg-white rounded-2xl border border-gray-200/90 shadow-xs hover:shadow-md hover:border-red-300 transition-all flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                <UtensilsCrossed className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-1 rounded-md">
-                Delivery
-              </span>
-              <h3 className="text-xl font-bold text-gray-900 mt-3 group-hover:text-red-600 transition-colors">
-                Order Home-Cooked Food
-              </h3>
-              <p className="text-xs text-gray-600 mt-2 leading-relaxed font-normal">
-                Discover authentic regional dishes prepared by home cooks and delivered to your door.
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-red-600">
-              <span>Explore Food</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
-            </div>
-          </Link>
-
-          {/* Card 2: DINE */}
-          <Link
-            to="/explore?type=dining"
-            className="group p-6 bg-white rounded-2xl border border-gray-200/90 shadow-xs hover:shadow-md hover:border-amber-300 transition-all flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                <Users className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md">
-                Experience
-              </span>
-              <h3 className="text-xl font-bold text-gray-900 mt-3 group-hover:text-amber-600 transition-colors">
-                Dine With Local Families
-              </h3>
-              <p className="text-xs text-gray-600 mt-2 leading-relaxed font-normal">
-                Share a meal with local families and experience food traditions where they belong.
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-amber-700">
-              <span>Explore Dining</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
-            </div>
-          </Link>
-
-          {/* Card 3: LEARN */}
-          <Link
-            to="/explore?type=workshop"
-            className="group p-6 bg-white rounded-2xl border border-gray-200/90 shadow-xs hover:shadow-md hover:border-orange-300 transition-all flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                <ChefHat className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-orange-700 bg-orange-50 px-2.5 py-1 rounded-md">
-                Masterclass
-              </span>
-              <h3 className="text-xl font-bold text-gray-900 mt-3 group-hover:text-orange-600 transition-colors">
-                Learn Traditional Recipes
-              </h3>
-              <p className="text-xs text-gray-600 mt-2 leading-relaxed font-normal">
-                Join hands-on cooking workshops and learn recipes passed down through generations.
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-orange-700">
-              <span>Explore Workshops</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
-            </div>
-          </Link>
-        </div>
-      </section>
-
+      <div className="mx-auto w-full max-w-7xl space-y-12 px-4 py-8 sm:px-6 lg:px-8">
       {/* 3. FOOD DISCOVERY SECTION ("EXPLORE FLAVOURS") */}
       <section className="space-y-6">
         <div className="flex items-center justify-between">
@@ -249,35 +191,72 @@ export const HomePage = () => {
           </div>
         </div>
 
-        {/* Horizontal Category Carousel */}
-        <div
-          ref={scrollRef}
-          className="flex items-center gap-5 overflow-x-auto scrollbar-none snap-x snap-mandatory py-2 px-1"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        >
-          {foodCategories.map((item) => (
-            <Link
-              key={item.id}
-              to={`/explore?cuisine=${encodeURIComponent(item.name)}`}
-              className="flex flex-col items-center shrink-0 group snap-start cursor-pointer w-28 sm:w-32"
-            >
-              <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden p-1 border-2 border-transparent group-hover:border-red-400 transition-all bg-white shadow-xs">
-                <img
-                  src={item.image}
-                  alt={`Authentic ${item.name} regional food`}
-                  loading="lazy"
-                  className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
-                  onError={(e) => {
-                    e.target.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80";
-                  }}
-                />
+        {/* Single swipeable category row */}
+        {loadingCategories ? (
+          <div className="flex items-center gap-5 overflow-x-auto scrollbar-none py-2 px-1">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex w-28 shrink-0 flex-col items-center sm:w-32 animate-pulse">
+                <div className="h-28 w-28 rounded-full bg-gray-200 sm:h-32 sm:w-32" />
+                <div className="mt-3 h-3 w-16 rounded bg-gray-200" />
               </div>
-              <span className="font-semibold text-xs sm:text-sm text-gray-900 group-hover:text-red-600 transition-colors mt-3 text-center">
-                {item.name}
-              </span>
-            </Link>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : categoriesError ? (
+          <div role="alert" className="py-8 text-center text-sm text-red-700">
+            {categoriesError}
+            <button type="button" onClick={() => setCategoryRetry((value) => value + 1)} className="ml-2 font-semibold underline underline-offset-2">
+              Try again
+            </button>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-500">
+            No regional food categories currently available.
+          </div>
+        ) : (
+          <div
+            ref={(element) => { rowRefs.current[0] = element; }}
+            className="flex items-center gap-5 overflow-x-auto overscroll-x-contain scrollbar-none snap-x snap-mandatory py-2 px-1"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none", scrollBehavior: "smooth", touchAction: "pan-x" }}
+          >
+            {categories.map((item) => {
+              const cuisinePhoto = getRegionalCuisinePhoto(item);
+              return (
+                <Link
+                  key={item.id}
+                  to={foodCategoryExploreHref(item)}
+                  className="group flex w-28 shrink-0 snap-start cursor-pointer flex-col items-center sm:w-32"
+                >
+                  <div className="relative h-28 w-28 overflow-hidden rounded-full border-2 border-transparent bg-white p-1 shadow-xs transition-all group-hover:border-red-400 sm:h-32 sm:w-32">
+                    {cuisinePhoto.image ? (
+                      <img
+                        src={cuisinePhoto.image}
+                        alt={cuisinePhoto.alt}
+                        loading="lazy"
+                        className="h-full w-full rounded-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          e.currentTarget.hidden = true;
+                          e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                          checkScrollLimits();
+                        }}
+                        onLoad={checkScrollLimits}
+                      />
+                    ) : null}
+                    <span
+                      className={`${cuisinePhoto.image ? "hidden " : ""}absolute inset-1 flex items-center justify-center rounded-full bg-orange-50 text-orange-600`}
+                      role="img"
+                      aria-label={`${cuisinePhoto.dish} photo unavailable`}
+                    >
+                      <UtensilsCrossed className="h-7 w-7" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <span className="mt-3 text-center text-xs font-semibold text-gray-900 transition-colors group-hover:text-red-600 sm:text-sm">
+                    {item.name}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* 4. CULTURE / HERITAGE SECTION ("MORE THAN JUST A MEAL") */}
@@ -327,63 +306,7 @@ export const HomePage = () => {
         </div>
       </section>
 
-      {/* 5. QUICK SHORTCUTS SECTION */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-bold text-gray-900">Quick Shortcuts</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Link
-            to="/explore"
-            className="p-4 bg-white rounded-2xl border border-gray-200/80 hover:border-red-300 shadow-xs hover:shadow-md transition-all flex items-center gap-3 group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Compass className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-bold text-xs text-gray-900 group-hover:text-red-600 transition-colors">Explore Food</p>
-              <p className="text-[10px] text-gray-500">All Cuisines</p>
-            </div>
-          </Link>
-
-          <Link
-            to="/orders"
-            className="p-4 bg-white rounded-2xl border border-gray-200/80 hover:border-orange-300 shadow-xs hover:shadow-md transition-all flex items-center gap-3 group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Package className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-bold text-xs text-gray-900 group-hover:text-orange-600 transition-colors">My Orders</p>
-              <p className="text-[10px] text-gray-500">Track History</p>
-            </div>
-          </Link>
-
-          <Link
-            to="/favourites"
-            className="p-4 bg-white rounded-2xl border border-gray-200/80 hover:border-rose-300 shadow-xs hover:shadow-md transition-all flex items-center gap-3 group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Heart className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-bold text-xs text-gray-900 group-hover:text-rose-600 transition-colors">Favourites</p>
-              <p className="text-[10px] text-gray-500">Saved Items</p>
-            </div>
-          </Link>
-
-          <Link
-            to="/profile"
-            className="p-4 bg-white rounded-2xl border border-gray-200/80 hover:border-emerald-300 shadow-xs hover:shadow-md transition-all flex items-center gap-3 group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-bold text-xs text-gray-900 group-hover:text-emerald-600 transition-colors">My Profile</p>
-              <p className="text-[10px] text-gray-500">Account Details</p>
-            </div>
-          </Link>
-        </div>
-      </section>
+    </div>
     </div>
   );
 };

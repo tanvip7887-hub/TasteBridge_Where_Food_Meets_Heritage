@@ -1,11 +1,12 @@
-import React from "react";
 import { Outlet } from "react-router-dom";
 import Navbar from "../components/layout/Navbar.jsx";
 import { Heart } from "lucide-react";
+import FavoritesSessionSync from "../components/favorites/FavoritesSessionSync.jsx";
 
 export const MainLayout = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] overflow-x-hidden">
+      <FavoritesSessionSync />
       <Navbar />
 
       <main className="flex-1 w-full">

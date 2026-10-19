@@ -20,10 +20,22 @@ export const errorHandler = (err, req, res, next) => {
   let rawMessage = err.message || API_MESSAGES.INTERNAL_ERROR;
   let errors = err.errors || null;
 
+  if (err.name === "MulterError") {
+    statusCode = HTTP_STATUS.BAD_REQUEST;
+    err.isOperational = true;
+    if (err.code === "LIMIT_FILE_SIZE") {
+      rawMessage = "Uploaded file exceeds the maximum allowed file size.";
+    }
+  }
+
   const isDev = process.env.NODE_ENV === ENVIRONMENT.DEVELOPMENT;
 
+  if (statusCode === 429 && err.retryAfterSeconds) {
+    res.setHeader("Retry-After", String(err.retryAfterSeconds));
+  }
+
   // Log raw technical error server-side
-  logger.error(`[${req.method} ${req.originalUrl}] ${rawMessage}`, {
+  logger.error(`[${req.method} ${req.path}] ${rawMessage}`, {
     statusCode,
     ...(err.stack ? { stack: err.stack } : {}),
   });
@@ -36,8 +48,10 @@ export const errorHandler = (err, req, res, next) => {
   let clientMessage = rawMessage;
 
   if (isTechnicalError || (!err.isOperational && !isDev)) {
-    statusCode = statusCode === 400 ? HTTP_STATUS.SERVICE_UNAVAILABLE : statusCode;
-    clientMessage = "We couldn't send the verification email right now. Please try again in a moment.";
+    if (!err.isOperational && !isDev) {
+      statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+    }
+    clientMessage = "An unexpected error occurred. Please try again.";
     errors = null;
   }
 
@@ -51,7 +65,7 @@ export const errorHandler = (err, req, res, next) => {
   }
 
   // Never expose stack trace or raw socket errors to clients
-  if (isDev && err.stack && !isTechnicalError) {
+  if (isDev && err.stack && !isTechnicalError && !err.suppressStackTrace) {
     response.stack = err.stack;
   }
 

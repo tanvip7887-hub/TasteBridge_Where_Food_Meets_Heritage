@@ -60,7 +60,18 @@ export const getChannel = async () => {
   return channel;
 };
 
-// Publish job to email queue (or direct SMTP if RabbitMQ is offline)
+// Helper to dispatch email directly via SMTP
+const sendDirectSmtp = async (jobData) => {
+  if (jobData.type === "PASSWORD_RESET_OTP") {
+    return await sendPasswordResetOtpEmail(jobData);
+  }
+  if (jobData.type === "PASSWORD_RESET") {
+    return await sendPasswordResetEmail(jobData);
+  }
+  return await sendVerificationEmail(jobData);
+};
+
+// Publish job to email queue (or direct SMTP if RabbitMQ is offline or no worker is consuming)
 export const publishEmailJob = async (jobData) => {
   const activeChannel = await getChannel();
 
@@ -69,19 +80,30 @@ export const publishEmailJob = async (jobData) => {
       logger.warn(
         `[RabbitMQ Offline] RabbitMQ is unavailable. Falling back to direct SMTP email delivery for: ${jobData.to}`
       );
-      if (jobData.type === "PASSWORD_RESET_OTP") {
-        return await sendPasswordResetOtpEmail(jobData);
-      }
-      if (jobData.type === "PASSWORD_RESET") {
-        return await sendPasswordResetEmail(jobData);
-      }
-      return await sendVerificationEmail(jobData);
+      return await sendDirectSmtp(jobData);
     } else {
       const errorMsg =
         "RabbitMQ is offline and SMTP credentials are missing in backend/.env. Please start RabbitMQ or configure SMTP_USER & SMTP_PASSWORD.";
       logger.error(`[Email Queue] ${errorMsg}`);
       throw new Error(errorMsg);
     }
+  }
+
+  // Check if there are active worker consumers listening on the queue
+  let hasConsumers = false;
+  try {
+    const queueInfo = await activeChannel.checkQueue(QUEUES.EMAIL);
+    hasConsumers = queueInfo.consumerCount > 0;
+  } catch (e) {
+    hasConsumers = false;
+  }
+
+  // If no worker process is currently consuming the queue, deliver directly via SMTP so email is not delayed
+  if (!hasConsumers && isSmtpConfigured()) {
+    logger.info(
+      `[Direct Delivery] Queue '${QUEUES.EMAIL}' has no active workers. Delivering email directly via SMTP to: ${jobData.to}`
+    );
+    return await sendDirectSmtp(jobData);
   }
 
   try {

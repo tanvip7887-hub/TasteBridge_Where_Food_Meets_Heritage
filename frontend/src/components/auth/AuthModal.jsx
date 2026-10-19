@@ -1,17 +1,23 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import LoginForm from "./LoginForm.jsx";
 import RegisterForm from "./RegisterForm.jsx";
 import ForgotPasswordForm from "./ForgotPasswordForm.jsx";
 
 export const AuthModal = ({ isOpen, onClose, initialMode = "login" }) => {
-  const [mode, setMode] = useState(initialMode);
-
-  useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode, isOpen]);
-
   if (!isOpen) return null;
+
+  return (
+    <AuthModalDialog
+      key={initialMode}
+      onClose={onClose}
+      initialMode={initialMode}
+    />
+  );
+};
+
+const AuthModalDialog = ({ onClose, initialMode }) => {
+  const [mode, setMode] = useState(initialMode);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">

@@ -31,13 +31,213 @@ enum VerificationStatus {
   NEEDS_REVISION
 }
 
+enum FssaiStatusType {
+  HAVE_REGISTRATION
+  APPLIED_ON_FOSCOS
+  NOT_YET_REGISTERED
+}
+
+enum FssaiWorkflowStatus {
+  NOT_SUBMITTED
+  IN_PROCESS
+  SUBMITTED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
 enum DocumentType {
   IDENTITY_PROOF
   FSSAI_LICENSE
   DRIVING_LICENSE
   VEHICLE_REGISTRATION
   HEALTH_CERTIFICATE
+  ADDRESS_PROOF
   OTHER
+}
+
+enum DishStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  UNPUBLISHED
+  REJECTED
+}
+
+enum StoryVisibility {
+  PUBLIC
+  PRIVATE
+  ARCHIVE_ONLY
+}
+
+enum SocialMediaType {
+  IMAGE
+  VIDEO
+}
+
+enum SocialPostType {
+  PHOTO
+  VIDEO
+  RECIPE
+  HERITAGE_STORY
+}
+
+enum SocialPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum SocialReportReason {
+  INAPPROPRIATE_CONTENT
+  HARASSMENT
+  SPAM
+  MISLEADING_CONTENT
+  OTHER
+}
+
+enum SocialReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+  ACTION_TAKEN
+}
+
+enum SocialModerationActionType {
+  MARK_REVIEWED
+  DISMISS_REPORT
+  HIDE_POST
+  HIDE_STORY
+  HIDE_COMMENT
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentMethod {
+  COD
+  ONLINE
+}
+
+enum PaymentAttemptMethod {
+  SIMULATED
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum ExperienceStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ExperienceType {
+  HOME_DINING
+  WORKSHOP
+}
+
+enum ExperienceAddressSource {
+  COOK_PROFILE
+  CUSTOM
+}
+
+enum ExperienceSlotStatus {
+  OPEN
+  PAUSED
+  CANCELLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  ACCEPTED
+  REJECTED
+}
+
+enum ExperiencePaymentProvider {
+  SIMULATED
+  RAZORPAY
+}
+
+enum ExperiencePaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+enum ExperiencePaymentVerification {
+  SIMULATED
+  PROVIDER_VERIFIED
+}
+
+enum ExperienceRefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+  REMOVED
+}
+
+enum ReviewType {
+  FOOD
+  EXPERIENCE
+}
+
+enum ReviewReportStatus {
+  ACTIVE
+  KEPT
+  HIDDEN
+}
+
+enum ReviewModerationAction {
+  KEPT
+  HIDDEN
+  REMOVED
+}
+
+enum NotificationType {
+  VERIFICATION_ALERT
+  PAYMENT_ALERT
+  ORDER_ALERT
+  SYSTEM_ALERT
+}
+
+enum NotificationPortal {
+  CUSTOMER
+  COOK
+  DELIVERY_AGENT
 }
 
 model User {
@@ -55,6 +255,20 @@ model User {
   verificationDocuments VerificationDocument[]
   addresses             Address[]
   passwordResetTokens   PasswordResetToken[]
+  orders                Order[]                @relation("CustomerOrders")
+  experienceBookings    ExperienceBooking[]
+  reviews               Review[]
+  socialPostLikes       CookPostLike[]
+  socialPostComments    CookPostComment[]
+  cookNotifications     CookNotification[]
+  userNotifications     UserNotification[]
+  reviewModerations     ReviewModerationLog[] @relation("ReviewModeratedBy")
+  resolvedReviewReports ReviewReport[]         @relation("ReviewReportResolvedBy")
+  cart                  Cart?
+  checkouts             Checkout[]
+  favorites             CustomerFavorite[]
+  socialContentReports  SocialContentReport[] @relation("SocialReportReporter")
+  socialModerationActions SocialModerationAction[] @relation("SocialModerationAdmin")
 
   @@index([email])
   @@index([role])
@@ -78,15 +292,52 @@ model PendingRegistration {
 }
 
 model CookProfile {
-  id                 String             @id @default(cuid())
-  userId             String             @unique
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  businessName       String
-  bio                String?            @db.Text
-  specialization     String?
-  verificationStatus VerificationStatus @default(PENDING)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                         String             @id @default(cuid())
+  userId                     String             @unique
+  user                       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName               String
+  profileImage               String?
+  profileImagePublicId       String?
+  bio                        String?            @db.Text
+  whoTaughtCooking           String?
+  specialization             String?
+  experienceYears            String?
+  cuisines                   String[]           @default([])
+  signatureDishes            String?            @db.Text
+  dietaryPreferences         String[]           @default([])
+  city                       String?
+  locality                   String?
+  serviceArea                String?
+  cookingCapacity            String?
+  isOpen                     Boolean            @default(true)
+  availableDays              String[]           @default([])
+  availableMealSlots         String[]           @default([])
+  prepTimeNotice             String?
+  isHomeKitchenDeclared      Boolean            @default(false)
+  fssaiNumber                String?
+  fssaiApplicationReference  String?
+  fssaiStatusType             FssaiStatusType?
+  fssaiExpiryDate             DateTime?
+  fssaiRejectionReason         String?            @db.Text
+  fssaiStatus                FssaiWorkflowStatus @default(NOT_SUBMITTED)
+  isApprovedToSell           Boolean            @default(false)
+  foodSafetyConsent          Boolean            @default(false)
+  foodSafetyConsentAt        DateTime?
+  foodSafetyAgreementVersion String?            @default("v1.0")
+  verificationStatus         VerificationStatus @default(PENDING)
+  revisionReason             String?            @db.Text
+  rejectionReason            String?            @db.Text
+  reviewedAt                 DateTime?
+  reviewedBy                 String?
+  dishes                     Dish[]
+  orders                     Order[]
+  experiences                Experience[]
+  socialStories              CookStory[]
+  socialPosts                CookPost[]
+  reviews                    Review[]
+  reviewReports              ReviewReport[]
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
 }
 
 model DeliveryAgent {
@@ -97,8 +348,29 @@ model DeliveryAgent {
   licenseNumber      String?
   verificationStatus VerificationStatus @default(PENDING)
   isAvailable        Boolean            @default(false)
+  orders             Order[]
+  payoutDetails      DeliveryAgentPayoutDetails?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
+}
+
+/// Private delivery-fee destination submitted by the agent and reviewed by an admin.
+/// This record does not represent a processed payout.
+model DeliveryAgentPayoutDetails {
+  id                 String             @id @default(cuid())
+  deliveryAgentId    String             @unique
+  deliveryAgent      DeliveryAgent      @relation(fields: [deliveryAgentId], references: [id], onDelete: Cascade)
+  upiId              String
+  accountHolderName  String
+  verificationStatus VerificationStatus @default(PENDING)
+  rejectionReason    String?            @db.Text
+  submittedAt        DateTime           @default(now())
+  reviewedAt         DateTime?
+  reviewedBy         String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([verificationStatus, submittedAt])
 }
 
 model VerificationDocument {
@@ -107,39 +379,777 @@ model VerificationDocument {
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   documentType       DocumentType
   documentUrl        String
+  documentNumber     String?
+  fileName           String?
+  fileSize           Int?
+  mimeType           String?
   verificationStatus VerificationStatus @default(PENDING)
   rejectionReason    String?
+  expiryDate         DateTime?
+  cloudinaryPublicId String?
+  resourceType       String?
+  storageProvider    String?            @default("CLOUDINARY")
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
   @@index([userId])
   @@index([documentType])
+  @@index([cloudinaryPublicId])
 }
 
 model Address {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label        String?
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  state        String
-  pincode      String
-  landmark     String?
-  isDefault    Boolean  @default(false)
-  latitude     Float?
-  longitude    Float?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label         String?
+  recipientName String?
+  phone         String?
+  addressLine1  String
+  addressLine2  String?
+  locality      String?
+  city          String
+  state         String
+  pincode       String
+  landmark      String?
+  isDefault     Boolean  @default(false)
+  latitude      Float?
+  longitude     Float?
+  orders        Order[]
+  checkouts     Checkout[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([userId])
 }
 
+model FoodCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  image       String?
+  isActive    Boolean  @default(true)
+  dishes      Dish[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Dish {
+  id                 String        @id @default(cuid())
+  cookId             String
+  cook               CookProfile   @relation(fields: [cookId], references: [id], onDelete: Cascade)
+  categoryId         String?
+  category           FoodCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name               String
+  description        String?       @db.Text
+  cuisine            String
+  price              Decimal       @db.Decimal(14, 2)
+  image              String?
+  imagePublicId      String?
+  isVegetarian       Boolean       @default(true)
+  ingredients        String[]      @default([])
+  instructions       String?       @db.Text
+  prepTimeMinutes    Int?          @default(30)
+  dietaryTags        String[]      @default([])
+  availableQuantity  Int           @default(10)
+  lowStockThreshold  Int           @default(3)
+  isAvailable        Boolean       @default(true)
+  status             DishStatus    @default(DRAFT)
+  story              DishStory?
+  socialStories      CookStory[]
+  socialPosts        CookPost[]
+  experienceMenuItems ExperienceMenuItem[]
+  orderItems         OrderItem[]
+  checkoutLines      CheckoutLine[]
+  cartItems          CartItem[]
+  favorites          CustomerFavorite[]
+  reviews            Review[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([cookId])
+  @@index([cuisine])
+  @@index([status])
+}
+
+model Cart {
+  id         String     @id @default(cuid())
+  customerId String     @unique
+  customer   User       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  dishId    String
+  dish      Dish     @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, dishId])
+  @@index([cartId])
+}
+
+model CustomerFavorite {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  dishId     String
+  dish       Dish     @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([customerId, dishId])
+  @@index([dishId])
+}
+
+model DishStory {
+  id                   String          @id @default(cuid())
+  dishId               String          @unique
+  dish                 Dish            @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  whoTaught            String          // Who taught the recipe (e.g., Grandmother, Mother)
+  occasion             String?         // Occasion (e.g., Sunday family meal, Diwali festival)
+  culturalSignificance String?         @db.Text // Regional lore & cultural heritage
+  storyText            String          @db.Text // Written heritage story
+  visibility           StoryVisibility @default(PUBLIC)
+  mediaUrl             String?         // Optional audio or video URL
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([dishId])
+}
+
+/// Short-lived social media created by an eligible Cook. DishStory remains
+/// the separate recipe-origin and cultural heritage record attached to Dish.
+model CookStory {
+  id                       String          @id @default(cuid())
+  cookId                   String
+  cook                     CookProfile     @relation(fields: [cookId], references: [id], onDelete: Cascade)
+  dishId                   String?
+  dish                     Dish?           @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  caption                  String?         @db.Text
+  mediaType                SocialMediaType
+  mediaUrl                 String
+  cloudinaryPublicId       String          @unique
+  cloudinaryResourceType   String
+  mediaFormat              String?
+  mediaMimeType            String
+  mediaBytes               Int
+  mediaDurationSeconds     Float?
+  viewCount                Int             @default(0)
+  publishedAt              DateTime        @default(now())
+  expiresAt                DateTime
+  moderationHiddenAt       DateTime?
+  reports                  SocialContentReport[] @relation("SocialStoryReports")
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([cookId, expiresAt])
+  @@index([dishId])
+  @@index([moderationHiddenAt, expiresAt])
+}
+
+/// Persistent social post with separately stored interaction records.
+model CookPost {
+  id          String          @id @default(cuid())
+  cookId      String
+  cook        CookProfile     @relation(fields: [cookId], references: [id], onDelete: Cascade)
+  dishId      String?
+  dish        Dish?           @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  postType    SocialPostType
+  caption     String?         @db.Text
+  status      SocialPostStatus @default(DRAFT)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  publishedAt DateTime?
+  moderationHiddenAt DateTime?
+  reports      SocialContentReport[] @relation("SocialPostReports")
+  media       CookPostMedia[]
+  likes       CookPostLike[]
+  comments    CookPostComment[]
+
+  @@index([cookId, status, updatedAt])
+  @@index([dishId])
+  @@index([moderationHiddenAt, publishedAt])
+}
+
+model CookPostMedia {
+  id                     String         @id @default(cuid())
+  postId                 String
+  post                   CookPost       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaType              SocialMediaType
+  mediaUrl               String
+  cloudinaryPublicId     String         @unique
+  cloudinaryResourceType String
+  mediaFormat            String?
+  mediaMimeType          String
+  mediaBytes             Int
+  mediaDurationSeconds   Float?
+  sortOrder              Int            @default(0)
+  createdAt              DateTime       @default(now())
+
+  @@index([postId, sortOrder])
+}
+
+model CookPostLike {
+  id        String    @id @default(cuid())
+  postId    String
+  post      CookPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId, createdAt])
+}
+
+model CookPostComment {
+  id        String            @id @default(cuid())
+  postId    String
+  post      CookPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    CookPostComment?  @relation("CookPostCommentThread", fields: [parentId, postId], references: [id, postId], onDelete: Cascade)
+  replies   CookPostComment[] @relation("CookPostCommentThread")
+  text      String?           @db.VarChar(300)
+  idempotencyKey String?
+  requestFingerprint String?
+  createdAt DateTime          @default(now())
+  deletedAt DateTime?
+  moderationHiddenAt DateTime?
+  reports     SocialContentReport[] @relation("SocialCommentReports")
+
+  @@unique([id, postId])
+  @@unique([authorId, idempotencyKey])
+  @@index([postId, deletedAt, createdAt])
+  @@index([authorId, createdAt])
+  @@index([parentId])
+  @@index([moderationHiddenAt])
+}
+
+/// User-submitted reports for already published social content. Target IDs are
+/// retained as an audit reference even if a Cook later deletes the content.
+model SocialContentReport {
+  id          String             @id @default(cuid())
+  reporterId  String
+  reporter    User               @relation("SocialReportReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  targetType  String
+  targetId    String
+  postId      String?
+  post        CookPost?           @relation("SocialPostReports", fields: [postId], references: [id], onDelete: SetNull)
+  storyId     String?
+  story       CookStory?          @relation("SocialStoryReports", fields: [storyId], references: [id], onDelete: SetNull)
+  commentId   String?
+  comment     CookPostComment?    @relation("SocialCommentReports", fields: [commentId], references: [id], onDelete: SetNull)
+  reason      SocialReportReason
+  explanation String?            @db.VarChar(500)
+  status      SocialReportStatus @default(PENDING)
+  createdAt   DateTime           @default(now())
+  reviewedAt  DateTime?
+  actions     SocialModerationAction[]
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId, createdAt])
+  @@index([postId])
+  @@index([storyId])
+  @@index([commentId])
+}
+
+/// Append-only log of Admin decisions. Target IDs deliberately survive content deletion.
+model SocialModerationAction {
+  id          String                    @id @default(cuid())
+  reportId    String
+  report      SocialContentReport       @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  adminUserId String
+  admin       User                      @relation("SocialModerationAdmin", fields: [adminUserId], references: [id], onDelete: Restrict)
+  targetType  String
+  targetId    String
+  action      SocialModerationActionType
+  reason      String?                   @db.VarChar(500)
+  createdAt   DateTime                  @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([adminUserId, createdAt])
+}
+
+model Order {
+  id              String         @id @default(cuid())
+  orderNumber     String         @unique
+  customerId      String
+  customer        User           @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Cascade)
+  cookId          String
+  cook            CookProfile    @relation(fields: [cookId], references: [id], onDelete: Cascade)
+  deliveryAgentId String?
+  deliveryAgent   DeliveryAgent? @relation(fields: [deliveryAgentId], references: [id], onDelete: SetNull)
+  addressId       String?
+  address         Address?       @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  checkoutId      String?
+  checkout        Checkout?      @relation(fields: [checkoutId], references: [id], onDelete: SetNull)
+  cookName        String         @default("")
+  status          OrderStatus    @default(PENDING)
+  paymentStatus   PaymentStatus  @default(PAID)
+  customerReceivedAt DateTime?
+  hiddenFromCustomerAt DateTime?
+  subtotal        Decimal        @db.Decimal(14, 2)
+  deliveryFee     Decimal        @default(30.0) @db.Decimal(14, 2)
+  platformFee     Decimal        @default(10.0) @db.Decimal(14, 2)
+  totalAmount     Decimal        @db.Decimal(14, 2)
+  cookEarning     Decimal        @db.Decimal(14, 2)
+  deliveryEarning Decimal        @db.Decimal(14, 2)
+  items           OrderItem[]
+  statusHistory   OrderStatusHistory[]
+  reviews         Review[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([customerId])
+  @@index([cookId])
+  @@index([deliveryAgentId])
+  @@index([status])
+  @@index([checkoutId])
+}
+
+model OrderStatusHistory {
+  id         String      @id @default(cuid())
+  orderId    String
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  changedAt  DateTime    @default(now())
+
+  @@index([orderId, changedAt, id])
+}
+
+/// One customer checkout can contain multiple cook-specific orders.
+model Checkout {
+  id                String   @id @default(cuid())
+  customerId        String
+  customer          User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  idempotencyKey    String
+  addressId         String?
+  address           Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  addressSnapshot   Json
+  paymentMethod     PaymentMethod?
+  subtotal          Decimal        @db.Decimal(14, 2)
+  deliveryFee       Decimal        @db.Decimal(14, 2)
+  platformFee       Decimal        @db.Decimal(14, 2)
+  totalAmount       Decimal        @db.Decimal(14, 2)
+  orders            Order[]
+  lines             CheckoutLine[]
+  cookSnapshots     CheckoutCookSnapshot[]
+  paymentAttempts   PaymentAttempt[]
+  createdAt         DateTime @default(now())
+
+  @@unique([customerId, idempotencyKey])
+  @@index([customerId, createdAt])
+}
+
+/// Immutable line snapshot for the exact basket and prices accepted at checkout initiation.
+model CheckoutLine {
+  id          String   @id @default(cuid())
+  checkoutId  String
+  checkout    Checkout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  cartItemId  String?
+  cartItemUpdatedAt DateTime?
+  dishId      String?
+  dish        Dish?    @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  cookId      String
+  dishName    String
+  cookName    String
+  cuisine     String
+  dishImage   String?
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  totalPrice  Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+
+  @@index([checkoutId, cookId])
+  @@index([dishId])
+}
+
+/// Immutable per-cook money allocation captured at checkout initiation.
+model CheckoutCookSnapshot {
+  id             String   @id @default(cuid())
+  checkoutId     String
+  checkout       Checkout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  cookId         String
+  cookName       String
+  subtotal       Decimal  @db.Decimal(14, 2)
+  deliveryFee    Decimal  @db.Decimal(14, 2)
+  platformFee    Decimal  @db.Decimal(14, 2)
+  totalAmount    Decimal  @db.Decimal(14, 2)
+  cookEarning    Decimal  @db.Decimal(14, 2)
+  deliveryEarning Decimal @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+
+  @@unique([checkoutId, cookId])
+}
+
+/// An online payment attempt for a checkout. Customer ownership is derived
+/// through Checkout.customerId so the owner is not duplicated here.
+model PaymentAttempt {
+  id           String                   @id @default(cuid())
+  checkoutId   String
+  checkout     Checkout                 @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  reference    String                   @unique
+  amount       Decimal                  @db.Decimal(14, 2)
+  currency     String                   @default("INR")
+  method       PaymentAttemptMethod     @default(SIMULATED)
+  methodLabel  String                   @default("TasteBridge simulated payment")
+  status       PaymentAttemptStatus     @default(PENDING)
+  expiresAt    DateTime
+  completedAt  DateTime?
+  events       PaymentAttemptEvent[]
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([checkoutId, createdAt])
+  @@index([status, expiresAt])
+}
+
+/// Immutable status-transition history for a payment attempt. Do not store
+/// card, UPI, or other payment credentials in this record.
+model PaymentAttemptEvent {
+  id               String               @id @default(cuid())
+  paymentAttemptId String
+  paymentAttempt   PaymentAttempt        @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  fromStatus       PaymentAttemptStatus?
+  toStatus         PaymentAttemptStatus
+  reasonCode       String?
+  createdAt        DateTime             @default(now())
+
+  @@index([paymentAttemptId, createdAt])
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dishId     String?
+  dish       Dish?    @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  name       String
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(14, 2)
+  totalPrice Decimal  @db.Decimal(14, 2)
+  dishImage  String?
+  review     Review?
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Experience {
+  id              String              @id @default(cuid())
+  cookId          String
+  cook            CookProfile         @relation(fields: [cookId], references: [id], onDelete: Cascade)
+  type            ExperienceType       @default(HOME_DINING)
+  title           String
+  theme           String?             @db.VarChar(120)
+  description     String?             @db.Text
+  teachingContent String?             @db.Text
+  learningOutcomes String?            @db.Text
+  materialsToBring String?            @db.Text
+  cuisine         String?
+  pricePerPerson  Float?
+  maxGuests       Int                 @default(6)
+  durationMinutes Int                 @default(120)
+  isVegetarian    Boolean             @default(false)
+  dietaryNotes    String?             @db.Text
+  menuNotes       String?             @db.Text
+  inclusions      String[]            @default([])
+  houseRules      String[]            @default([])
+  photos          String[]            @default([])
+  publicArea      String?             @db.VarChar(250)
+  privateAddress  String?             @db.Text
+  addressSource   ExperienceAddressSource?
+  location        String?
+  image           String?
+  publishIdempotencyKey       String? @db.VarChar(128)
+  publishRequestFingerprint  String? @db.VarChar(64)
+  reviewRejectionReason String? @db.Text
+  status          ExperienceStatus    @default(APPROVED)
+  menuItems       ExperienceMenuItem[]
+  slots           ExperienceSlot[]
+  bookings        ExperienceBooking[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([cookId])
+  @@index([status])
+  @@unique([cookId, publishIdempotencyKey])
+}
+
+model ExperienceMenuItem {
+  experienceId String
+  experience   Experience @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  dishId       String
+  dish         Dish       @relation(fields: [dishId], references: [id], onDelete: Restrict)
+  sortOrder    Int        @default(0)
+  note         String?    @db.VarChar(250)
+  createdAt    DateTime   @default(now())
+
+  @@id([experienceId, dishId])
+  @@unique([experienceId, sortOrder])
+  @@index([dishId])
+}
+
+model ExperienceSlot {
+  id             String               @id @default(cuid())
+  experienceId   String
+  experience     Experience           @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  startsAt       DateTime             @db.Timestamptz(3)
+  endsAt         DateTime             @db.Timestamptz(3)
+  capacity       Int
+  availableSeats Int
+  status         ExperienceSlotStatus @default(OPEN)
+  bookings       ExperienceBooking[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([experienceId, startsAt, status])
+}
+
+model ExperienceBooking {
+  id                       String          @id @default(cuid())
+  experienceId             String
+  experience               Experience      @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  customerId               String
+  customer                 User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  slotId                   String?
+  slot                     ExperienceSlot? @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  bookingDate              DateTime
+  numberOfGuests           Int
+  totalAmount              Float
+  pricePerPersonSnapshot   Decimal?        @db.Decimal(14, 2)
+  totalAmountSnapshot      Decimal?        @db.Decimal(14, 2)
+  idempotencyKey           String?
+  requestFingerprint       String?         @db.VarChar(64)
+  holdExpiresAt            DateTime?       @db.Timestamptz(3)
+  expiredAt                DateTime?       @db.Timestamptz(3)
+  acceptedAt               DateTime?       @db.Timestamptz(3)
+  rejectedAt               DateTime?       @db.Timestamptz(3)
+  paymentExpiresAt         DateTime?       @db.Timestamptz(3)
+  status                   BookingStatus   @default(CONFIRMED)
+  cancellationRequestedAt    DateTime?       @db.Timestamptz(3)
+  cancellationReason         String?         @db.VarChar(500)
+  cancellationStatus         String?         @db.VarChar(30)
+  cancellationDecisionReason String?         @db.VarChar(500)
+  cancellationDecidedAt      DateTime?       @db.Timestamptz(3)
+  completedAt              DateTime?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  review                   Review?
+  paymentAttempts          ExperiencePaymentAttempt[]
+
+  @@index([experienceId])
+  @@index([customerId])
+  @@index([status, completedAt])
+  @@index([slotId, status])
+  @@index([status, holdExpiresAt])
+  @@index([cancellationStatus])
+  @@unique([customerId, idempotencyKey])
+}
+
+/// Dine-specific payment attempt. Kept separate from food checkout payments.
+/// A successful simulated attempt is explicitly distinguishable from a
+/// provider-verified payment through verificationMode.
+model ExperiencePaymentAttempt {
+  id                 String                       @id @default(cuid())
+  experienceBookingId String
+  experienceBooking  ExperienceBooking            @relation(fields: [experienceBookingId], references: [id], onDelete: Restrict)
+  attemptNumber      Int
+  idempotencyKey     String
+  reference          String                       @unique
+  provider           ExperiencePaymentProvider    @default(SIMULATED)
+  providerReference  String?                      @unique
+  amount             Decimal                      @db.Decimal(14, 2)
+  currency           String                       @default("INR") @db.VarChar(3)
+  status             ExperiencePaymentStatus      @default(PENDING)
+  verificationMode   ExperiencePaymentVerification?
+  expiresAt          DateTime                     @db.Timestamptz(3)
+  succeededAt        DateTime?                    @db.Timestamptz(3)
+  events             ExperiencePaymentEvent[]
+  refund             ExperienceRefund?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  @@unique([experienceBookingId, attemptNumber])
+  @@unique([experienceBookingId, idempotencyKey])
+  @@index([experienceBookingId, createdAt])
+  @@index([status, expiresAt])
+}
+
+/// Idempotent provider-event record and audit trail for Dine payment updates.
+model ExperiencePaymentEvent {
+  id                       String                        @id @default(cuid())
+  paymentAttemptId         String
+  paymentAttempt           ExperiencePaymentAttempt     @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  provider                 ExperiencePaymentProvider
+  providerEventKey         String?
+  fromStatus               ExperiencePaymentStatus?
+  toStatus                 ExperiencePaymentStatus
+  verificationMode         ExperiencePaymentVerification?
+  reasonCode               String?                       @db.VarChar(80)
+  createdAt                DateTime                      @default(now())
+
+  @@unique([provider, providerEventKey])
+  @@index([paymentAttemptId, createdAt])
+}
+
+/// Durable Dine refund instruction. SUCCEEDED is set only after provider
+/// confirmation; failed refunds remain retryable and auditable.
+model ExperienceRefund {
+  id                    String                    @id @default(cuid())
+  paymentAttemptId      String                    @unique
+  paymentAttempt        ExperiencePaymentAttempt  @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
+  idempotencyKey        String                    @unique
+  provider              ExperiencePaymentProvider @default(SIMULATED)
+  providerReference     String?                   @unique
+  amount                Decimal                   @db.Decimal(14, 2)
+  currency              String                    @default("INR") @db.VarChar(3)
+  status                ExperienceRefundStatus    @default(PENDING)
+  verificationMode      ExperiencePaymentVerification?
+  attemptCount          Int                       @default(0)
+  nextAttemptAt         DateTime?                 @db.Timestamptz(3)
+  lastAttemptAt         DateTime?                 @db.Timestamptz(3)
+  succeededAt           DateTime?                 @db.Timestamptz(3)
+  lastFailureCode       String?                   @db.VarChar(80)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  @@index([status, nextAttemptAt])
+}
+
+model Review {
+  id           String       @id @default(cuid())
+  reviewType   ReviewType   @default(FOOD)
+  orderId      String?
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItemId  String?      @unique
+  orderItem    OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  experienceBookingId String? @unique
+  experienceBooking ExperienceBooking? @relation(fields: [experienceBookingId], references: [id], onDelete: Restrict)
+  customerId   String
+  customer     User         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  cookId       String
+  cook         CookProfile  @relation(fields: [cookId], references: [id], onDelete: Cascade)
+  dishId       String?
+  dish         Dish?        @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  subjectNameSnapshot String?
+  cookNameSnapshot String?
+  rating       Int
+  comment      String?      @db.Text
+  cookReply    String?      @db.VarChar(300)
+  cookRepliedAt DateTime?
+  isReported   Boolean      @default(false)
+  reportReason String?
+  reportedAt   DateTime?
+  status       ReviewStatus @default(PUBLISHED)
+  moderationReason String?
+  moderatedAt  DateTime?
+  reports      ReviewReport[]
+  moderationEvents ReviewModerationLog[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([cookId])
+  @@index([customerId])
+  @@index([isReported])
+  @@index([reviewType, status, createdAt])
+  @@index([dishId, status, createdAt])
+}
+
+model ReviewReport {
+  id                String             @id @default(cuid())
+  reviewId          String             @unique
+  review            Review             @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  cookId            String
+  cook              CookProfile        @relation(fields: [cookId], references: [id], onDelete: Restrict)
+  reason            String             @db.VarChar(500)
+  status            ReviewReportStatus @default(ACTIVE)
+  createdAt         DateTime           @default(now())
+  resolvedAt        DateTime?
+  resolvedByAdminId String?
+  resolvedByAdmin   User?              @relation("ReviewReportResolvedBy", fields: [resolvedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([cookId, createdAt])
+}
+
+model ReviewModerationLog {
+  id          String                 @id @default(cuid())
+  reviewId    String
+  review      Review                 @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  adminUserId String
+  adminUser   User                   @relation("ReviewModeratedBy", fields: [adminUserId], references: [id], onDelete: Restrict)
+  action      ReviewModerationAction
+  reason      String                 @db.VarChar(500)
+  createdAt   DateTime               @default(now())
+
+  @@index([reviewId, createdAt])
+  @@index([adminUserId, createdAt])
+}
+
+model PlatformNotification {
+  id        String           @id @default(cuid())
+  type      NotificationType @default(SYSTEM_ALERT)
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  eventKey  String?          @unique
+  createdAt DateTime         @default(now())
+
+  @@index([type])
+  @@index([isRead])
+}
+
+model CookNotification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(VERIFICATION_ALERT)
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+model UserNotification {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portal    NotificationPortal
+  type      NotificationType  @default(SYSTEM_ALERT)
+  title     String
+  message   String            @db.Text
+  isRead    Boolean           @default(false)
+  metadata  Json?
+  eventKey  String?
+  createdAt DateTime          @default(now())
+
+  @@index([userId, portal, isRead, createdAt])
+  @@unique([userId, portal, eventKey])
+}
+
 model PlatformSettings {
   id                 String   @id @default("default")
-  platformFeePercent Float    @default(10.0)
-  deliveryFeeBase    Float    @default(30.0)
+  platformFeePercent Decimal  @default(10.0) @db.Decimal(7, 4)
+  deliveryFeeBase    Decimal  @default(30.0) @db.Decimal(14, 2)
+  experienceCancellationWindowHours Int @default(48)
+  experienceCookResponseWindowHours Int @default(24)
+  experienceBookingCutoffHours Int @default(6)
+  experiencePaymentHoldMinutes Int @default(15)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

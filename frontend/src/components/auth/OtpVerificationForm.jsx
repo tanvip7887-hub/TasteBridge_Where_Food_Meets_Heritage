@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { verifyRegisterOtp, resendRegisterOtp } from "../../store/slices/authSlice.js";
@@ -83,7 +83,12 @@ export const OtpVerificationForm = ({ email, onSuccess, onBack }) => {
 
     if (verifyRegisterOtp.fulfilled.match(result)) {
       if (onSuccess) onSuccess();
-      navigate("/onboarding");
+      const verifiedUser = result.payload?.user;
+      if (verifiedUser?.role === "ADMIN") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/");
+      }
     } else if (verifyRegisterOtp.rejected.match(result)) {
       const err = result.payload;
       setErrorMsg(
@@ -103,7 +108,7 @@ export const OtpVerificationForm = ({ email, onSuccess, onBack }) => {
     setResending(false);
 
     if (resendRegisterOtp.fulfilled.match(result)) {
-      setInfoMsg("A new 6-digit verification code has been sent to your email.");
+      setInfoMsg("A new verification email was submitted to your email provider. It may take a few minutes to arrive; check your Inbox and Spam/Junk folders.");
       setCooldown(60);
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
@@ -123,7 +128,7 @@ export const OtpVerificationForm = ({ email, onSuccess, onBack }) => {
         </div>
         <h2 className="text-2xl font-bold text-gray-900">Verify your email</h2>
         <p className="text-sm text-gray-600 mt-1">
-          We've sent a 6-digit verification code to:
+          The verification email was submitted successfully to your email provider. It may take a few minutes to arrive; check your Inbox and Spam/Junk folders:
         </p>
         <p className="text-sm font-semibold text-gray-900 mt-0.5">{email}</p>
       </div>

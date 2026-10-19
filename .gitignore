@@ -1,0 +1,6 @@
+.vite/
+
+# Local environment configuration; keep shareable templates in Git.
+**/.env
+**/.env.*
+!**/.env.example

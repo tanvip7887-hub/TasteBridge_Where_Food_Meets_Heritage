@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import AuthModal from "../components/auth/AuthModal.jsx";
 import tasteBridgeVideo from "../assets/tastebridge_video.mp4";
 import {

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Mail, ArrowLeft, CheckCircle2, AlertCircle, Loader2, KeyRound, Lock, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Mail, ArrowLeft, CheckCircle2, AlertCircle, Loader2, KeyRound, Lock } from "lucide-react";
 import api from "../../api/axios.js";
 
 export const ForgotPasswordForm = ({ onSwitchToLogin }) => {

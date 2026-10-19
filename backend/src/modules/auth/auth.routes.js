@@ -5,6 +5,7 @@ import {
   resendOtp,
   login,
   getMe,
+  switchPortal,
   forgotPassword,
   verifyResetOtp,
   resetPassword,
@@ -17,23 +18,51 @@ import {
   forgotPasswordSchema,
   verifyResetOtpSchema,
   resetPasswordSchema,
+  switchPortalSchema,
 } from "./auth.validation.js";
 import { validate } from "../../middlewares/validate.js";
 import { authenticate } from "../../middlewares/auth.js";
+import { authRateLimiters } from "../../middlewares/authRateLimit.js";
 
 const router = Router();
 
-router.post("/register", validate(registerSchema), register);
-router.post("/register/verify-otp", validate(verifyOtpSchema), verifyOtp);
-router.post("/verify-otp", validate(verifyOtpSchema), verifyOtp);
-router.post("/register/resend-otp", validate(resendOtpSchema), resendOtp);
-router.post("/resend-otp", validate(resendOtpSchema), resendOtp);
-router.post("/login", validate(loginSchema), login);
+router.post("/register", validate(registerSchema), authRateLimiters.register, register);
+router.post(
+  "/register/verify-otp",
+  validate(verifyOtpSchema),
+  authRateLimiters.registrationVerify,
+  verifyOtp
+);
+router.post("/verify-otp", validate(verifyOtpSchema), authRateLimiters.registrationVerify, verifyOtp);
+router.post(
+  "/register/resend-otp",
+  validate(resendOtpSchema),
+  authRateLimiters.registrationResend,
+  resendOtp
+);
+router.post("/resend-otp", validate(resendOtpSchema), authRateLimiters.registrationResend, resendOtp);
+router.post("/login", validate(loginSchema), authRateLimiters.login, login);
 router.get("/me", authenticate, getMe);
+router.post("/switch-portal", authenticate, validate(switchPortalSchema), switchPortal);
 
 // Password Reset Routes (Publicly accessible)
-router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
-router.post("/verify-reset-otp", validate(verifyResetOtpSchema), verifyResetOtp);
-router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+router.post(
+  "/forgot-password",
+  validate(forgotPasswordSchema),
+  authRateLimiters.passwordResetRequest,
+  forgotPassword
+);
+router.post(
+  "/verify-reset-otp",
+  validate(verifyResetOtpSchema),
+  authRateLimiters.passwordResetVerify,
+  verifyResetOtp
+);
+router.post(
+  "/reset-password",
+  validate(resetPasswordSchema),
+  authRateLimiters.passwordResetComplete,
+  resetPassword
+);
 
 export default router;

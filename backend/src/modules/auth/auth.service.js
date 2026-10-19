@@ -2,24 +2,23 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import prisma from "../../config/prisma.js";
-import { publishEmailJob } from "../../config/rabbitmq.js";
+import env from "../../config/env.js";
+import { sendEmailJob } from "../../services/email.service.js";
 import { AppError } from "../../utils/AppError.js";
 import { HTTP_STATUS } from "../../constants/index.js";
+import { getAvailablePortals, resolveActivePortal, serializePortalUser } from "./portal-access.js";
 
 // Helper to remove passwordHash from user object
-export const sanitizeUser = (user) => {
-  const { passwordHash, ...safeUser } = user;
-  return safeUser;
-};
+export const sanitizeUser = (user, activePortal) => serializePortalUser(user, activePortal);
 
 // Generate JWT token
-export const generateToken = (userId, role) => {
-  const secret = process.env.JWT_SECRET;
+export const generateToken = (userId, role, activePortal = role) => {
+  const secret = env.JWT_SECRET || process.env.JWT_SECRET;
   if (!secret) {
     throw new AppError("JWT secret is not configured", HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
-  return jwt.sign({ userId, role }, secret, {
-    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  return jwt.sign({ userId, role, activePortal }, secret, {
+    expiresIn: env.JWT_EXPIRES_IN || process.env.JWT_EXPIRES_IN || "7d",
   });
 };
 
@@ -28,24 +27,36 @@ const generateNumericOtp = () => {
   return crypto.randomInt(100000, 999999).toString();
 };
 
-export const registerUser = async ({ name, email, phone, password }) => {
+const OTP_ATTEMPT_LIMIT = 5;
+const OTP_UNAVAILABLE_MESSAGE = "The verification code is invalid or unavailable. Request a new code and try again.";
+const publicOtpError = (statusCode = HTTP_STATUS.BAD_REQUEST, retryAfterSeconds = null, message = OTP_UNAVAILABLE_MESSAGE) => {
+  const error = new AppError(message, statusCode, null, retryAfterSeconds);
+  error.suppressStackTrace = true;
+  return error;
+};
+
+export const registerUser = async ({ name, email, phone, password }, {
+  database = prisma,
+  emailSender = sendEmailJob,
+  now = Date.now,
+} = {}) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // 1. Check for duplicate email in verified Users table
-  const existingEmail = await prisma.user.findUnique({
+  const existingEmail = await database.user.findUnique({
     where: { email: normalizedEmail },
   });
   if (existingEmail) {
-    throw new AppError("An account with this email already exists", HTTP_STATUS.CONFLICT);
+    return { email: normalizedEmail, expiresIn: 600 };
   }
 
   // 2. Check for duplicate phone if provided
   if (phone) {
-    const existingPhone = await prisma.user.findUnique({
+    const existingPhone = await database.user.findUnique({
       where: { phone },
     });
     if (existingPhone) {
-      throw new AppError("An account with this phone number already exists", HTTP_STATUS.CONFLICT);
+      return { email: normalizedEmail, expiresIn: 600 };
     }
   }
 
@@ -53,11 +64,11 @@ export const registerUser = async ({ name, email, phone, password }) => {
   const rawOtp = generateNumericOtp();
   const passwordHash = await bcrypt.hash(password, 10);
   const otpHash = await bcrypt.hash(rawOtp, 10);
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-  const resendAllowedAt = new Date(Date.now() + 60 * 1000); // 60 seconds cooldown
+  const expiresAt = new Date(now() + 10 * 60 * 1000); // 10 minutes expiry
+  const resendAllowedAt = new Date(now() + 60 * 1000); // 60 seconds cooldown
 
   // 4. Store or overwrite PendingRegistration
-  await prisma.pendingRegistration.upsert({
+  await database.pendingRegistration.upsert({
     where: { email: normalizedEmail },
     update: {
       name,
@@ -80,9 +91,9 @@ export const registerUser = async ({ name, email, phone, password }) => {
     },
   });
 
-  // 5. Publish email job to RabbitMQ queue
+  // 5. Send verification email directly via email service
   try {
-    await publishEmailJob({
+    await emailSender({
       type: "EMAIL_OTP",
       to: normalizedEmail,
       name,
@@ -91,7 +102,7 @@ export const registerUser = async ({ name, email, phone, password }) => {
     });
   } catch (error) {
     throw new AppError(
-      error.message || "Failed to queue verification email. Email service is currently unavailable.",
+      error.message || "Failed to send verification email. Email service is currently unavailable.",
       HTTP_STATUS.SERVICE_UNAVAILABLE
     );
   }
@@ -102,64 +113,48 @@ export const registerUser = async ({ name, email, phone, password }) => {
   };
 };
 
-export const verifyRegisterOtp = async ({ email, otp }) => {
+export const verifyRegisterOtp = async ({ email, otp }, { database = prisma, now = () => new Date() } = {}) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // 1. Find PendingRegistration
-  const pending = await prisma.pendingRegistration.findUnique({
+  const pending = await database.pendingRegistration.findUnique({
     where: { email: normalizedEmail },
   });
 
   if (!pending) {
-    throw new AppError(
-      "No pending registration found for this email. Please register again.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+    throw publicOtpError();
   }
 
   // 2. Check expiration
-  if (pending.expiresAt < new Date()) {
-    await prisma.pendingRegistration.delete({ where: { email: normalizedEmail } });
-    throw new AppError(
-      "Verification code has expired. Please register again to get a new code.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+  if (pending.expiresAt < now()) {
+    await database.pendingRegistration.delete({ where: { email: normalizedEmail } });
+    throw publicOtpError();
   }
 
   // 3. Check attempts limit
-  if (pending.attempts >= 5) {
-    await prisma.pendingRegistration.delete({ where: { email: normalizedEmail } });
-    throw new AppError(
-      "Maximum verification attempts exceeded. Please register again.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+  if (pending.attempts >= OTP_ATTEMPT_LIMIT) {
+    await database.pendingRegistration.delete({ where: { email: normalizedEmail } });
+    throw publicOtpError();
   }
 
   // 4. Verify OTP hash
   const isValid = await bcrypt.compare(otp, pending.otpHash);
   if (!isValid) {
     const updatedAttempts = pending.attempts + 1;
-    if (updatedAttempts >= 5) {
-      await prisma.pendingRegistration.delete({ where: { email: normalizedEmail } });
-      throw new AppError(
-        "Maximum verification attempts exceeded. Please register again.",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    if (updatedAttempts >= OTP_ATTEMPT_LIMIT) {
+      await database.pendingRegistration.delete({ where: { email: normalizedEmail } });
+      throw publicOtpError();
     } else {
-      await prisma.pendingRegistration.update({
+      await database.pendingRegistration.update({
         where: { email: normalizedEmail },
         data: { attempts: updatedAttempts },
       });
-      const remaining = 5 - updatedAttempts;
-      throw new AppError(
-        `Invalid verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
-        HTTP_STATUS.BAD_REQUEST
-      );
+      throw publicOtpError();
     }
   }
 
   // 5. Atomic Transaction: Create User + Remove PendingRegistration
-  const user = await prisma.$transaction(async (tx) => {
+  const user = await database.$transaction(async (tx) => {
     const createdUser = await tx.user.create({
       data: {
         name: pending.name,
@@ -179,7 +174,8 @@ export const verifyRegisterOtp = async ({ email, otp }) => {
   });
 
   // 6. Generate JWT token
-  const token = generateToken(user.id, user.role);
+  const activePortal = resolveActivePortal(user, user.role);
+  const token = generateToken(user.id, user.role, activePortal);
 
   return {
     token,
@@ -187,38 +183,37 @@ export const verifyRegisterOtp = async ({ email, otp }) => {
   };
 };
 
-export const resendRegisterOtp = async ({ email }) => {
+export const resendRegisterOtp = async ({ email }, {
+  database = prisma,
+  emailSender = sendEmailJob,
+  now = () => new Date(),
+} = {}) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // 1. Find PendingRegistration
-  const pending = await prisma.pendingRegistration.findUnique({
+  const pending = await database.pendingRegistration.findUnique({
     where: { email: normalizedEmail },
   });
 
   if (!pending) {
-    throw new AppError(
-      "No pending registration found for this email.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+    return { email: normalizedEmail, expiresIn: 600 };
   }
 
   // 2. Enforce resend cooldown
-  if (pending.resendAllowedAt && pending.resendAllowedAt > new Date()) {
-    const secondsLeft = Math.ceil((pending.resendAllowedAt.getTime() - Date.now()) / 1000);
-    throw new AppError(
-      `Please wait ${secondsLeft} second${secondsLeft === 1 ? "" : "s"} before requesting a new code.`,
-      429
-    );
+  const currentTime = now();
+  if (pending.resendAllowedAt && pending.resendAllowedAt > currentTime) {
+    const secondsLeft = Math.max(1, Math.ceil((pending.resendAllowedAt.getTime() - currentTime.getTime()) / 1000));
+    throw publicOtpError(429, secondsLeft, "Please wait before requesting another verification code.");
   }
 
   // 3. Generate new 6-digit OTP & hashes
   const rawOtp = generateNumericOtp();
   const otpHash = await bcrypt.hash(rawOtp, 10);
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-  const resendAllowedAt = new Date(Date.now() + 60 * 1000); // 60 seconds cooldown
+  const expiresAt = new Date(currentTime.getTime() + 10 * 60 * 1000); // 10 minutes expiry
+  const resendAllowedAt = new Date(currentTime.getTime() + 60 * 1000); // 60 seconds cooldown
 
   // 4. Update PendingRegistration
-  await prisma.pendingRegistration.update({
+  await database.pendingRegistration.update({
     where: { email: normalizedEmail },
     data: {
       otpHash,
@@ -228,9 +223,9 @@ export const resendRegisterOtp = async ({ email }) => {
     },
   });
 
-  // 5. Publish email job to RabbitMQ queue
+  // 5. Send verification email directly via email service
   try {
-    await publishEmailJob({
+    await emailSender({
       type: "EMAIL_OTP",
       to: normalizedEmail,
       name: pending.name,
@@ -239,7 +234,7 @@ export const resendRegisterOtp = async ({ email }) => {
     });
   } catch (error) {
     throw new AppError(
-      error.message || "Failed to queue verification email. Email service is currently unavailable.",
+      error.message || "Failed to send verification email. Email service is currently unavailable.",
       HTTP_STATUS.SERVICE_UNAVAILABLE
     );
   }
@@ -256,6 +251,25 @@ export const loginUser = async ({ email, password }) => {
   // 1. Find user by email
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
+    include: {
+      cookProfile: {
+        select: {
+          id: true,
+          businessName: true,
+          profileImage: true,
+          isOpen: true,
+          verificationStatus: true,
+          isApprovedToSell: true,
+        },
+      },
+      deliveryAgent: {
+        select: {
+          id: true,
+          verificationStatus: true,
+          isAvailable: true,
+        },
+      },
+    },
   });
 
   if (!user) {
@@ -277,17 +291,55 @@ export const loginUser = async ({ email, password }) => {
   }
 
   // 4. Generate token
-  const token = generateToken(user.id, user.role);
+  const activePortal = resolveActivePortal(user, user.role);
+  const token = generateToken(user.id, user.role, activePortal);
 
   return {
     token,
-    user: sanitizeUser(user),
+    user: sanitizeUser(user, activePortal),
   };
 };
 
-export const getUserById = async (userId) => {
+export const createPortalSwitchService = (database) => async (userId, requestedPortal) => {
+  const user = await database.user.findUnique({
+    where: { id: userId },
+    include: {
+      cookProfile: { select: { id: true, businessName: true, profileImage: true, isOpen: true, verificationStatus: true, isApprovedToSell: true } },
+      deliveryAgent: { select: { id: true, verificationStatus: true, isAvailable: true } },
+    },
+  });
+  if (!user) throw new AppError("User not found.", HTTP_STATUS.NOT_FOUND);
+  if (user.status !== "ACTIVE") throw new AppError("Account is not active.", HTTP_STATUS.FORBIDDEN);
+  if (!getAvailablePortals(user).includes(requestedPortal)) {
+    throw new AppError("This portal is unavailable until its account and approval requirements are met.", HTTP_STATUS.FORBIDDEN);
+  }
+  return { token: generateToken(user.id, user.role, requestedPortal), user: sanitizeUser(user, requestedPortal) };
+};
+
+export const switchActivePortal = createPortalSwitchService(prisma);
+
+export const getUserById = async (userId, activePortal) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
+    include: {
+      cookProfile: {
+        select: {
+          id: true,
+          businessName: true,
+          profileImage: true,
+          isOpen: true,
+          verificationStatus: true,
+          isApprovedToSell: true,
+        },
+      },
+      deliveryAgent: {
+        select: {
+          id: true,
+          verificationStatus: true,
+          isAvailable: true,
+        },
+      },
+    },
   });
 
   if (!user) {
@@ -301,10 +353,14 @@ export const getUserById = async (userId) => {
     );
   }
 
-  return sanitizeUser(user);
+  return sanitizeUser(user, activePortal);
 };
 
-export const forgotPassword = async ({ email }) => {
+export const forgotPassword = async ({ email }, {
+  database = prisma,
+  emailSender = sendEmailJob,
+  now = Date.now,
+} = {}) => {
   const normalizedEmail = email.toLowerCase().trim();
   const genericResponse = {
     email: normalizedEmail,
@@ -312,7 +368,7 @@ export const forgotPassword = async ({ email }) => {
   };
 
   // 1. Find user by email
-  const user = await prisma.user.findUnique({
+  const user = await database.user.findUnique({
     where: { email: normalizedEmail },
   });
 
@@ -324,11 +380,11 @@ export const forgotPassword = async ({ email }) => {
   // 2. Generate 6-digit numeric OTP & hashes
   const rawOtp = crypto.randomInt(100000, 999999).toString();
   const otpHash = await bcrypt.hash(rawOtp, 10);
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-  const resendAllowedAt = new Date(Date.now() + 60 * 1000); // 60 seconds cooldown
+  const expiresAt = new Date(now() + 10 * 60 * 1000); // 10 minutes expiry
+  const resendAllowedAt = new Date(now() + 60 * 1000); // 60 seconds cooldown
 
   // 3. Upsert PasswordResetToken record for this email
-  await prisma.passwordResetToken.upsert({
+  await database.passwordResetToken.upsert({
     where: { email: normalizedEmail },
     update: {
       userId: user.id,
@@ -349,9 +405,9 @@ export const forgotPassword = async ({ email }) => {
     },
   });
 
-  // 4. Enqueue email job to RabbitMQ queue
+  // 4. Send password reset email directly via email service
   try {
-    await publishEmailJob({
+    await emailSender({
       type: "PASSWORD_RESET_OTP",
       to: normalizedEmail,
       name: user.name,
@@ -365,59 +421,43 @@ export const forgotPassword = async ({ email }) => {
   return genericResponse;
 };
 
-export const verifyResetOtp = async ({ email, otp }) => {
+export const verifyResetOtp = async ({ email, otp }, { database = prisma, now = () => new Date() } = {}) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // 1. Find PasswordResetToken
-  const record = await prisma.passwordResetToken.findUnique({
+  const record = await database.passwordResetToken.findUnique({
     where: { email: normalizedEmail },
   });
 
   if (!record) {
-    throw new AppError(
-      "No pending password reset request found for this email. Please request a code again.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+    throw publicOtpError();
   }
 
   // 2. Check expiration
-  if (record.expiresAt < new Date()) {
-    await prisma.passwordResetToken.delete({ where: { email: normalizedEmail } });
-    throw new AppError(
-      "Verification code has expired. Please request a new code.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+  if (record.expiresAt < now()) {
+    await database.passwordResetToken.delete({ where: { email: normalizedEmail } });
+    throw publicOtpError();
   }
 
   // 3. Check attempts limit
-  if (record.attempts >= 5) {
-    await prisma.passwordResetToken.delete({ where: { email: normalizedEmail } });
-    throw new AppError(
-      "Maximum verification attempts exceeded. Please request a new code.",
-      HTTP_STATUS.BAD_REQUEST
-    );
+  if (record.attempts >= OTP_ATTEMPT_LIMIT) {
+    await database.passwordResetToken.delete({ where: { email: normalizedEmail } });
+    throw publicOtpError();
   }
 
   // 4. Verify OTP hash
   const isValid = await bcrypt.compare(otp, record.otpHash);
   if (!isValid) {
     const updatedAttempts = record.attempts + 1;
-    if (updatedAttempts >= 5) {
-      await prisma.passwordResetToken.delete({ where: { email: normalizedEmail } });
-      throw new AppError(
-        "Maximum verification attempts exceeded. Please request a new code.",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    if (updatedAttempts >= OTP_ATTEMPT_LIMIT) {
+      await database.passwordResetToken.delete({ where: { email: normalizedEmail } });
+      throw publicOtpError();
     } else {
-      await prisma.passwordResetToken.update({
+      await database.passwordResetToken.update({
         where: { email: normalizedEmail },
         data: { attempts: updatedAttempts },
       });
-      const remaining = 5 - updatedAttempts;
-      throw new AppError(
-        `Invalid verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
-        HTTP_STATUS.BAD_REQUEST
-      );
+      throw publicOtpError();
     }
   }
 
@@ -425,7 +465,7 @@ export const verifyResetOtp = async ({ email, otp }) => {
   const rawResetToken = crypto.randomBytes(32).toString("hex");
   const resetTokenHash = crypto.createHash("sha256").update(rawResetToken).digest("hex");
 
-  await prisma.passwordResetToken.update({
+  await database.passwordResetToken.update({
     where: { email: normalizedEmail },
     data: {
       resetTokenHash,

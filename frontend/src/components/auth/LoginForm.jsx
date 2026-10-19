@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,6 +14,7 @@ const loginSchema = z.object({
 
 export const LoginForm = ({ onSuccess, onSwitchToRegister, onSwitchToForgotPassword }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { loading } = useSelector((state) => state.auth);
   const [serverError, setServerError] = useState("");
 
@@ -30,6 +31,17 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister, onSwitchToForgotPassw
     const result = await dispatch(loginUser(data));
 
     if (loginUser.fulfilled.match(result)) {
+      const loggedInUser = result.payload?.user;
+      if (loggedInUser?.activePortal === "ADMIN" || loggedInUser?.role === "ADMIN") {
+        navigate("/admin/dashboard");
+      } else if (loggedInUser?.activePortal === "COOK") {
+        navigate("/cook");
+      } else if (loggedInUser?.activePortal === "DELIVERY_AGENT") {
+        navigate("/delivery-agent");
+      } else {
+        // Customer accounts open the marketplace; portal accounts go to their own panel.
+        navigate("/");
+      }
       if (onSuccess) onSuccess();
     } else if (loginUser.rejected.match(result)) {
       const err = result.payload;
@@ -73,9 +85,8 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister, onSwitchToForgotPassw
               type="email"
               placeholder="name@example.com"
               {...register("email")}
-              className={`w-full pl-9 pr-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 ${
-                errors.email ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full pl-9 pr-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 ${errors.email ? "border-red-500" : "border-gray-300"
+                }`}
             />
           </div>
           {errors.email && (
@@ -102,9 +113,8 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister, onSwitchToForgotPassw
               type="password"
               placeholder="••••••••"
               {...register("password")}
-              className={`w-full pl-9 pr-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 ${
-                errors.password ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full pl-9 pr-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 ${errors.password ? "border-red-500" : "border-gray-300"
+                }`}
             />
           </div>
           {errors.password && (

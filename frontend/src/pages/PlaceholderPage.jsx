@@ -1,6 +1,5 @@
-import React from "react";
 import { useSearchParams, Link, useLocation } from "react-router-dom";
-import { Compass, ArrowLeft, Utensils, Users, ChefHat, ShoppingBag, UserCheck, Package, Heart, Bike } from "lucide-react";
+import { Compass, ArrowLeft, ChefHat, ShoppingBag, UserCheck, Package, Heart, Bike } from "lucide-react";
 
 export const PlaceholderPage = ({ title, description, iconName }) => {
   const [searchParams] = useSearchParams();
