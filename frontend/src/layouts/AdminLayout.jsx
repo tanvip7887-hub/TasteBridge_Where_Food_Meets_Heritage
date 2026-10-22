@@ -22,10 +22,13 @@ import {
   LogOut,
   Menu,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 export const AdminLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -57,6 +60,7 @@ export const AdminLayout = () => {
       ],
     },
     {
+      header: "OPERATIONS",
       items: [
         { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
         { label: "Payments & Earnings", path: "/admin/payments", icon: DollarSign },
@@ -64,8 +68,18 @@ export const AdminLayout = () => {
         { label: "Workshops", path: "/admin/workshops", icon: BookOpenCheck },
         { label: "Dine Bookings", path: "/admin/dine-bookings", icon: CalendarCheck2 },
         { label: "Workshop Bookings", path: "/admin/workshop-bookings", icon: BookOpenCheck },
+      ],
+    },
+    {
+      header: "COMMUNITY",
+      items: [
         { label: "Reviews", path: "/admin/reviews", icon: MessageSquareWarning },
         { label: "Social reports", path: "/admin/social-reports", icon: ShieldAlert },
+      ],
+    },
+    {
+      header: "ADMINISTRATION",
+      items: [
         { label: "Verifications", path: "/admin/verifications", icon: FileCheck },
         { label: "Settings", path: "/admin/settings", icon: Sliders },
       ],
@@ -75,14 +89,14 @@ export const AdminLayout = () => {
   return (
     <div className="min-h-screen flex bg-[#FAF8F5]">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 bg-slate-900 text-slate-100 border-r border-slate-800 shrink-0 sticky top-0 h-screen overflow-y-auto">
+      <aside aria-label="Admin sidebar" className={`hidden lg:flex flex-col ${sidebarCollapsed ? "w-[76px]" : "w-64"} transition-[width] duration-200 bg-[#2B1B12] text-[#FFF8F0] border-r border-[#2B1B12]/20 shrink-0 sticky top-0 h-screen overflow-hidden`}>
         {/* Sidebar Brand Header */}
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-          <Link to="/admin/dashboard" className="flex items-center gap-2.5 group">
+        <div className={`shrink-0 border-b border-[#FFF8F0]/10 flex items-center ${sidebarCollapsed ? "flex-col gap-2 px-2 py-3" : "justify-between p-5"}`}>
+          <Link to="/admin/dashboard" className={`flex items-center gap-2.5 group ${sidebarCollapsed ? "justify-center" : ""}`} title={sidebarCollapsed ? "TasteBridge Admin home" : undefined}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-red-500/20 group-hover:scale-105 transition-transform shrink-0">
               <UtensilsCrossed className="w-5 h-5" />
             </div>
-            <div>
+            <div className={sidebarCollapsed ? "lg:hidden" : ""}>
               <span className="text-xl font-bold bg-gradient-to-r from-red-500 via-amber-400 to-amber-300 bg-clip-text text-transparent block leading-tight">
                 TasteBridge
               </span>
@@ -91,14 +105,17 @@ export const AdminLayout = () => {
               </span>
             </div>
           </Link>
+          <button type="button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#FFF8F0]/70 transition-colors hover:bg-[#FFF8F0]/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A]">
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+          </button>
         </div>
 
         {/* Navigation Groups */}
-        <nav className="flex-1 px-3 py-4 space-y-4">
+        <nav aria-label="Admin navigation" className={`min-h-0 flex-1 overflow-y-auto ${sidebarCollapsed ? "space-y-4 px-2 py-4" : "space-y-6 px-3 py-4"} [scrollbar-color:#6b5143_#2B1B12] [scrollbar-width:thin]`}>
           {navGroups.map((group, gIdx) => (
-            <div key={`nav-group-${gIdx}`} className="space-y-1">
+            <div key={`nav-group-${gIdx}`} className={`space-y-1.5 ${sidebarCollapsed ? "text-center" : ""}`}>
               {group.header && (
-                <span className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
+                <span className={`px-3 text-xs font-extrabold uppercase tracking-wider text-[#FFF8F0]/40 block mb-2 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
                   {group.header}
                 </span>
               )}
@@ -108,16 +125,17 @@ export const AdminLayout = () => {
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    title={sidebarCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+                      `flex min-h-11 items-center ${sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-xl py-2 text-[15px] font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A] ${
                         isActive
-                          ? "bg-red-600 text-white shadow-sm"
-                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                          ? "bg-[#D2552B] text-white shadow-md shadow-[#D2552B]/20"
+                          : "text-[#FFF8F0]/75 hover:bg-[#FFF8F0]/10 hover:text-white"
                       }`
                     }
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{item.label}</span>
+                    <Icon className="h-5 w-5 shrink-0" />
+                    <span className={sidebarCollapsed ? "lg:hidden" : ""}>{item.label}</span>
                   </NavLink>
                 );
               })}
@@ -126,13 +144,15 @@ export const AdminLayout = () => {
         </nav>
 
         {/* Admin Sidebar Footer */}
-        <div className="p-4 border-t border-slate-800 space-y-2">
+        <div className={`shrink-0 border-t border-[#FFF8F0]/10 ${sidebarCollapsed ? "p-2" : "p-3"} space-y-1.5`}>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors cursor-pointer"
+            aria-label={sidebarCollapsed ? "Sign Out" : undefined}
+            title={sidebarCollapsed ? "Sign Out" : undefined}
+            className={`flex min-h-11 w-full items-center ${sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3 text-left"} rounded-xl py-2 text-[15px] font-semibold text-red-400 transition-colors duration-150 hover:bg-red-950/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A] cursor-pointer`}
           >
-            <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
+            <LogOut className="h-5 w-5" />
+            <span className={sidebarCollapsed ? "lg:hidden" : ""}>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -140,7 +160,7 @@ export const AdminLayout = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         {/* Top Sticky Header */}
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between">
+        <header className="sticky top-0 z-30 min-h-16 bg-white/95 backdrop-blur-md border-b border-[#2B1B12]/10 px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -149,13 +169,13 @@ export const AdminLayout = () => {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="text-base font-bold text-gray-900 hidden sm:block">TasteBridge Administration</h1>
+            <div className="min-w-0"><h1 className="truncate text-base font-bold text-[#2B1B12]">TasteBridge Administration</h1><p className="hidden text-xs text-gray-500 sm:block">TasteBridge Admin Panel</p></div>
           </div>
 
           <div className="flex items-center gap-4">
             <Link
               to="/admin/notifications"
-              className="relative p-2 rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]"
               title="Platform Alerts"
               aria-label="Platform alerts"
             >
@@ -183,7 +203,7 @@ export const AdminLayout = () => {
               className="fixed inset-0 bg-black/60 backdrop-blur-xs"
               onClick={() => setMobileMenuOpen(false)}
             />
-            <div className="relative flex-1 max-w-xs w-full bg-slate-900 text-slate-100 flex flex-col p-4 z-50">
+            <div className="relative flex-1 max-w-xs w-full bg-[#2B1B12] text-[#FFF8F0] flex flex-col p-4 z-50">
               <div className="flex items-center justify-between pb-4 border-b border-slate-800">
                 <Link
                   to="/admin/dashboard"
@@ -209,11 +229,11 @@ export const AdminLayout = () => {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <nav className="flex-1 py-4 space-y-4 overflow-y-auto">
+              <nav aria-label="Admin navigation" className="min-h-0 flex-1 py-4 space-y-6 overflow-y-auto [scrollbar-color:#6b5143_#2B1B12] [scrollbar-width:thin]">
                 {navGroups.map((group, gIdx) => (
                   <div key={`mob-group-${gIdx}`} className="space-y-1">
                     {group.header && (
-                      <span className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
+                      <span className="px-3 text-xs font-extrabold uppercase tracking-wider text-[#FFF8F0]/40 block mb-2">
                         {group.header}
                       </span>
                     )}
@@ -225,12 +245,12 @@ export const AdminLayout = () => {
                           to={item.path}
                           onClick={() => setMobileMenuOpen(false)}
                           className={({ isActive }) =>
-                            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                              isActive ? "bg-red-600 text-white" : "text-slate-300 hover:bg-slate-800"
+                            `flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-[15px] font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A] ${
+                              isActive ? "bg-[#D2552B] text-white shadow-md shadow-[#D2552B]/20" : "text-[#FFF8F0]/75 hover:bg-[#FFF8F0]/10 hover:text-white"
                             }`
                           }
                         >
-                          <Icon className="w-4 h-4" />
+                          <Icon className="h-5 w-5 shrink-0" />
                           <span>{item.label}</span>
                         </NavLink>
                       );
@@ -238,6 +258,11 @@ export const AdminLayout = () => {
                   </div>
                 ))}
               </nav>
+              <div className="shrink-0 border-t border-[#FFF8F0]/10 pt-3">
+                <button onClick={handleLogout} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-[15px] font-semibold text-red-400 transition-colors hover:bg-red-950/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A]">
+                  <LogOut className="h-5 w-5" /><span>Sign Out</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { AlertCircle, BookOpen, Clock3, LoaderCircle, MessageCircle, MessageSquare, Pencil, Plus, RefreshCw, Send, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BookOpen, Clock3, LoaderCircle, MessageCircle, MessageSquare, Pencil, Plus, Send, Trash2, Upload } from "lucide-react";
 import cookApi from "../../../api/cookApi.js";
 import { createPostComment, deletePostComment, listPublicStories } from "../../../api/socialApi.js";
 import { activeStoriesForCook, findPublicStoryGroupForCook, ownStoryViewerPath } from "../../../utils/cookStoryEntry.js";
@@ -306,31 +306,26 @@ export const CookStoriesPage = () => {
 
   return (
     <main className="space-y-5 pb-12">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm sm:p-6">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-[#D2552B]">Cook Panel</p>
-          <h1 className="mt-1 text-2xl font-extrabold text-[#2B1B12]">My Stories</h1>
-          <p className="mt-1 text-sm text-[#2B1B12]/65">Share kitchen moments, recipes, and stories with your community.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => ownActiveStory ? navigate(ownStoryViewerPath(cookId, ownActiveStory.id), { state: { returnTo: "/cook/stories" } }) : openComposer("story")}
-            disabled={ownStoryChecking}
-            className="flex w-[72px] shrink-0 flex-col items-center gap-1 text-center disabled:cursor-wait disabled:opacity-60"
-            aria-label={ownStoryChecking ? "Checking your Story" : ownActiveStory ? "View your active Story" : "Add to Your Story"}
-            title={ownStoryCheckFailed ? "Could not check Story visibility. Use Refresh to try again." : undefined}
-          >
-            <span className={`relative flex h-12 w-12 items-center justify-center rounded-full p-[2px] ${ownActiveStory ? "bg-gradient-to-br from-[#F4A52A] via-[#D2552B] to-[#8D3820]" : "border-2 border-dashed border-[#D2552B]/50 bg-[#FFF7EE]"}`}>
-              <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#FFF7EE] text-[#D2552B]">
-                {user?.cookProfile?.profileImage ? <img src={user.cookProfile.profileImage} alt="" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} /> : <BookOpen size={18} />}
-              </span>
-              {!ownActiveStory && !ownStoryChecking && <span aria-hidden="true" className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#D2552B] text-white"><Plus size={12} strokeWidth={3} /></span>}
+      <header className="flex items-center justify-between gap-4 rounded-2xl border border-[#2B1B12]/10 bg-white px-6 py-4 shadow-sm">
+        <h1 className="sr-only">My Stories</h1>
+        <button
+          type="button"
+          onClick={() => ownActiveStory ? navigate(ownStoryViewerPath(cookId, ownActiveStory.id), { state: { returnTo: "/cook/stories" } }) : openComposer("story")}
+          disabled={ownStoryChecking}
+          className="flex w-[72px] shrink-0 flex-col items-center gap-1 text-center disabled:cursor-wait disabled:opacity-60"
+          aria-label={ownStoryChecking ? "Checking your Story" : ownActiveStory ? "View your active Story" : "Add to Your Story"}
+          title={ownStoryCheckFailed ? "Could not check Story visibility. Use Refresh to try again." : undefined}
+        >
+          <span className={`relative flex h-12 w-12 items-center justify-center rounded-full p-[2px] ${ownActiveStory ? "bg-gradient-to-br from-[#F4A52A] via-[#D2552B] to-[#8D3820]" : "border-2 border-dashed border-[#D2552B]/50 bg-[#FFF7EE]"}`}>
+            <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#FFF7EE] text-[#D2552B]">
+              {user?.cookProfile?.profileImage ? <img src={user.cookProfile.profileImage} alt="" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} /> : <BookOpen size={18} />}
             </span>
-            <span className="w-full truncate text-[11px] font-semibold text-[#2B1B12]">Your Story</span>
-          </button>
-          <button type="button" onClick={() => openComposer("post")} className="inline-flex items-center gap-2 rounded-xl bg-[#D2552B] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#BD4723]"><Plus size={17} /> Add post</button>
-          <button type="button" onClick={loadData} disabled={loading} aria-label="Refresh social content" className="rounded-xl border border-gray-200 bg-white p-2.5 text-gray-700 disabled:opacity-50"><RefreshCw size={17} className={loading ? "animate-spin" : ""} /></button>
+            {!ownActiveStory && !ownStoryChecking && <span aria-hidden="true" className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#D2552B] text-white"><Plus size={12} strokeWidth={3} /></span>}
+          </span>
+          <span className="w-full truncate text-[11px] font-semibold text-[#2B1B12]">Your Story</span>
+        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          <button type="button" onClick={() => openComposer("post")} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#D2552B] px-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#BD4723] min-[480px]:px-4"><Plus size={17} /> Add post</button>
         </div>
       </header>
 

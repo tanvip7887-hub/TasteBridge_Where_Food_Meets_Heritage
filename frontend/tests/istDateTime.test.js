@@ -11,7 +11,7 @@ test("Dine instants display in IST regardless of the browser timezone and invali
 
 test("Dine discovery, customer history, and Cook screens share the explicit IST formatter", async () => {
   const paths = [
-    "../src/components/events/DineExperienceDiscovery.jsx",
+    "../src/components/events/ExperienceCard.jsx",
     "../src/pages/MyEventsPage.jsx",
     "../src/pages/cook/panel/CookBookingsPage.jsx",
     "../src/pages/cook/panel/CookExperiencesPage.jsx",

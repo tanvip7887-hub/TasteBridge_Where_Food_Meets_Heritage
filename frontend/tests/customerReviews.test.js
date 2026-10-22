@@ -97,12 +97,15 @@ test("CustomerOrderDetailPage displays item-level and order-level review entry p
 });
 
 test("MyEventsPage displays experience review entry point only when completed booking is eligible", async () => {
-  const eventsPageCode = await read("../src/pages/MyEventsPage.jsx");
+  const [eventsPageCode, bookingCardCode] = await Promise.all([
+    read("../src/pages/MyEventsPage.jsx"),
+    read("../src/components/bookings/BookingCard.jsx"),
+  ]);
 
   assert.match(eventsPageCode, /usePendingReviews/);
   assert.match(eventsPageCode, /getPendingBookingItem/);
-  assert.match(eventsPageCode, /booking\.status === "COMPLETED" && pendingItem && onReview/);
-  assert.match(eventsPageCode, /Review this experience/);
+  assert.match(bookingCardCode, /booking\.status === "COMPLETED" && pendingItem && onReview/);
+  assert.match(bookingCardCode, /Review this experience/);
   assert.match(eventsPageCode, /<CustomerReviewModal/);
 });
 
@@ -112,4 +115,13 @@ test("CustomerReviewsPage integrates reusable CustomerReviewModal and refreshes 
   assert.match(reviewsPageCode, /<CustomerReviewModal/);
   assert.match(reviewsPageCode, /modalTarget/);
   assert.match(reviewsPageCode, /void load\(\)/);
+  assert.match(reviewsPageCode, /setPendingPagination\(pendingData\.pagination \|\| null\)/);
+  assert.match(reviewsPageCode, /setMinePagination\(mineData\.pagination \|\| null\)/);
+  assert.match(reviewsPageCode, /getReviewTabCount\(visiblePending, pendingPagination, \{ filterActive: hasPendingFilter \}\)/);
+  assert.match(reviewsPageCode, /getReviewTabCount\(mine, minePagination\)/);
+  assert.match(reviewsPageCode, /pending\.filter\(/);
+  assert.match(reviewsPageCode, /reviewsApi\.pending\(\{ page: 1, limit: 50 \}\)/);
+  assert.match(reviewsPageCode, /reviewsApi\.mine\(\{ page: 1, limit: 50 \}\)/);
+  assert.match(reviewsPageCode, /<ReviewCard .*variant="ready"/);
+  assert.match(reviewsPageCode, /<ReviewCard .*variant="submitted"/);
 });

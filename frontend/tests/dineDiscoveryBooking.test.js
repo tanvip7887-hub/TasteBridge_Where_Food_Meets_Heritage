@@ -148,9 +148,10 @@ test("definitive success and backend rejection retire the pending key", () => {
 });
 
 test("Explore connects public discovery and booking while preserving food marketplace behavior", async () => {
-  const [page, discovery, api, backendRoutes, bookingUtils] = await Promise.all([
+  const [page, discovery, card, api, backendRoutes, bookingUtils] = await Promise.all([
     read("../src/pages/ExplorePage.jsx"),
     read("../src/components/events/DineExperienceDiscovery.jsx"),
+    read("../src/components/events/ExperienceCard.jsx"),
     read("../src/api/eventsApi.js"),
     read("../../backend/src/modules/events/customer-events.routes.js"),
     read("../src/utils/dineExperienceBooking.js"),
@@ -162,8 +163,8 @@ test("Explore connects public discovery and booking while preserving food market
   assert.match(api, /api\.post\("\/events\/bookings", data\)/);
   assert.match(backendRoutes, /router\.post\("\/bookings", validate\(createDineBookingSchema\), createMyDineBooking\)/);
   assert.match(discovery, /eventsApi\.getExperiences\(params, \{ signal: controller\.signal \}\)/);
-  assert.match(discovery, /experience\.slots\.map/);
-  assert.match(discovery, /availableSeats/);
+  assert.match(card, /experience\.slots\.map/);
+  assert.match(card, /availableSeats/);
   assert.match(bookingUtils, /experience\?\.maxGuests/);
   assert.match(discovery, /eventsApi\.createBooking\(payload\)/);
   assert.match(discovery, /getOrCreateDineBookingIdempotencyKey/);
@@ -190,9 +191,10 @@ test("My Events displays the server-returned status after a successful booking r
 });
 
 test("discovery exposes loading, empty, API failure, validation, and duplicate-submit states", async () => {
-  const [discovery, bookingUtils] = await Promise.all([
+  const [discovery, bookingUtils, card] = await Promise.all([
     read("../src/components/events/DineExperienceDiscovery.jsx"),
     read("../src/utils/dineExperienceBooking.js"),
+    read("../src/components/events/ExperienceCard.jsx"),
   ]);
   assert.match(discovery, /role="status"[\s\S]*?Loading experiences/);
   assert.match(discovery, /No available experiences yet/);
@@ -201,7 +203,7 @@ test("discovery exposes loading, empty, API failure, validation, and duplicate-s
   assert.match(discovery, /setBookingErrors\(\(current\) => \(\{ \.\.\.current, \[experience\.id\]: message/);
   assert.match(discovery, /catch \(error\)/);
   assert.match(discovery, /submitLock\.current\) return/);
-  assert.match(discovery, /disabled=\{busy \|\| guestLimit < 1\}/);
+  assert.match(card, /disabled=\{busy \|\| guestLimit < 1\}/);
   assert.match(bookingUtils, /validateDineBookingSelection/);
   assert.match(discovery, /setRetry\(\(value\) => value \+ 1\)/);
 });

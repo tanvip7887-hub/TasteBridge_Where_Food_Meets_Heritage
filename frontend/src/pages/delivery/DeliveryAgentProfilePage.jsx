@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bike, CheckCircle2, Clock3, Eye, FileText, Loader2, MapPin, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertCircle, Bike, CheckCircle2, Clock3, Eye, FileText, Loader2, Mail, MapPin, Phone, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { deliveryAgentApi } from "../../api/deliveryAgentApi.js";
 import { useOutletContext } from "react-router-dom";
 import { getDeliveryAgentPayoutValidationError, normalizeDeliveryAgentPayoutDetails } from "../../utils/deliveryAgentPayout.js";
@@ -20,11 +20,32 @@ const statusStyle = (status) => {
   return "bg-red-50 text-red-800 border-red-200";
 };
 
+const labelForDocument = (document) => document.documentType === "OTHER" && document.mimeType?.startsWith("image/")
+  ? "Profile photo"
+  : documentLabels[document.documentType] || document.documentType?.replaceAll("_", " ") || "Verification document";
+
+const pendingDocumentBlobRequests = new Map();
+const getDocumentBlob = (documentId) => {
+  if (!pendingDocumentBlobRequests.has(documentId)) {
+    const request = deliveryAgentApi.getDocument(documentId).then((response) => {
+      const blob = response?.data instanceof Blob ? response.data : response;
+      if (!(blob instanceof Blob)) throw new Error("The document response was not a file.");
+      return blob;
+    });
+    pendingDocumentBlobRequests.set(documentId, request);
+    request.finally(() => {
+      if (pendingDocumentBlobRequests.get(documentId) === request) pendingDocumentBlobRequests.delete(documentId);
+    }).catch(() => {});
+  }
+  return pendingDocumentBlobRequests.get(documentId);
+};
+
 export const DeliveryAgentProfilePage = () => {
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState(null);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
   const [upiId, setUpiId] = useState("");
   const [accountHolderName, setAccountHolderName] = useState("");
   const [payoutSubmitting, setPayoutSubmitting] = useState(false);
@@ -49,6 +70,22 @@ export const DeliveryAgentProfilePage = () => {
   }, []);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    const photo = application?.user?.verificationDocuments?.find((document) => document.documentType === "OTHER" && document.mimeType?.startsWith("image/") && document.verificationStatus === "APPROVED");
+    setProfilePhotoUrl("");
+    if (!photo?.id) return undefined;
+    getDocumentBlob(photo.id).then((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      if (active) setProfilePhotoUrl(objectUrl);
+      else URL.revokeObjectURL(objectUrl);
+    }).catch(() => {});
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [application]);
   useEffect(() => () => {
     requestId.current += 1;
     if (preview?.url) URL.revokeObjectURL(preview.url);
@@ -65,9 +102,7 @@ export const DeliveryAgentProfilePage = () => {
     if (preview?.url) URL.revokeObjectURL(preview.url);
     setPreview({ id: document.id, name: document.fileName || documentLabels[document.documentType] || "Verification document", isPdf: document.mimeType === "application/pdf" || document.fileName?.toLowerCase().endsWith(".pdf"), loading: true, url: null, error: "" });
     try {
-      const response = await deliveryAgentApi.getDocument(document.id);
-      const blob = response?.data instanceof Blob ? response.data : response;
-      if (!(blob instanceof Blob)) throw new Error("The document response was not a file.");
+      const blob = await getDocumentBlob(document.id);
       const url = URL.createObjectURL(blob);
       if (requestId.current !== id) {
         URL.revokeObjectURL(url);
@@ -104,8 +139,8 @@ export const DeliveryAgentProfilePage = () => {
     }
   };
 
-  if (loading) return <div role="status" className="flex min-h-64 items-center justify-center gap-3 text-sm text-gray-600"><Loader2 className="h-5 w-5 animate-spin text-red-600" />Loading profile…</div>;
-  if (error) return <section className="mx-auto max-w-2xl rounded-2xl border border-orange-100 bg-white p-6 text-center shadow-sm" role="alert"><AlertCircle className="mx-auto h-8 w-8 text-red-600" /><h1 className="mt-3 text-xl font-bold text-[#2B1B12]">Profile unavailable</h1><p className="mt-2 text-sm text-gray-600">{error}</p><button type="button" onClick={loadProfile} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#D2552B] px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700"><RefreshCw className="h-4 w-4" />Try again</button></section>;
+  if (loading) return <div role="status" aria-label="Loading profile" className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-2"><div className="h-36 animate-pulse rounded-2xl bg-white shadow-sm sm:col-span-2" /><div className="h-56 animate-pulse rounded-2xl bg-white shadow-sm" /><div className="h-56 animate-pulse rounded-2xl bg-white shadow-sm" /><div className="h-48 animate-pulse rounded-2xl bg-white shadow-sm sm:col-span-2" /></div>;
+  if (error) return <section className="mx-auto max-w-2xl rounded-2xl border border-orange-100 bg-white p-6 text-center shadow-sm" role="alert"><AlertCircle className="mx-auto h-8 w-8 text-red-600" /><h1 className="mt-3 text-xl font-bold text-[#2B1B12]">Profile unavailable</h1><p className="mt-2 text-sm text-gray-600">{error}</p><button type="button" onClick={loadProfile} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#D2552B] px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"><RefreshCw className="h-4 w-4" />Try again</button></section>;
   if (!application) return <section className="rounded-2xl border border-orange-100 bg-white p-6 text-sm text-gray-600">No delivery-agent profile was found.</section>;
 
   const user = application.user || {};
@@ -116,23 +151,40 @@ export const DeliveryAgentProfilePage = () => {
   const address = application.address;
   const addressText = address && [address.addressLine1, address.addressLine2, address.locality, address.city, address.state, address.pincode].filter(Boolean).join(", ");
 
-  return <div className="mx-auto max-w-5xl space-y-5">
-    <header><p className="text-sm font-semibold text-[#D2552B]">Account</p><h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#2B1B12]">My profile</h1><p className="mt-2 text-sm text-gray-600">Your submitted delivery profile and verification documents.</p></header>
+  const approvedCount = documents.filter((document) => document.verificationStatus === "APPROVED").length;
+  const attentionDocuments = documents.filter((document) => document.verificationStatus === "PENDING" || document.verificationStatus === "REJECTED");
+  const verificationLabel = application.verificationStatus?.replaceAll("_", " ") || "Not submitted";
+  const initials = (user.name || "DA").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  const field = (label, value, Icon, href) => <div className="flex min-w-0 items-start gap-3 rounded-xl bg-[#F8F9FB] p-3.5"><span className="mt-0.5 text-[#D2552B]"><Icon className="h-4 w-4" /></span><div className="min-w-0"><dt className="text-xs font-medium text-gray-500">{label}</dt><dd className="mt-1 break-words text-sm font-semibold text-[#2B1B12]">{value ? (href ? <a className="rounded-sm hover:text-[#D2552B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400" href={href}>{value}</a> : value) : <span className="font-normal text-gray-500">Not provided</span>}</dd></div></div>;
 
-    <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-orange-100 pb-4"><div className="flex items-center gap-3"><span className="rounded-xl bg-red-50 p-3 text-red-700"><Bike className="h-5 w-5" /></span><div><h2 className="text-lg font-extrabold text-[#2B1B12]">Personal profile</h2><p className="text-sm text-gray-600">{user.name || "Delivery agent"}</p></div></div><span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${statusStyle(application.verificationStatus)}`}>{application.verificationStatus === "APPROVED" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}{application.verificationStatus?.replaceAll("_", " ") || "Not submitted"}</span></div>
-      <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Email</dt><dd className="mt-1 break-all font-medium text-[#2B1B12]">{user.email || "Not provided"}</dd></div>
-        <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Phone</dt><dd className="mt-1 font-medium text-[#2B1B12]">{user.phone || "Not provided"}</dd></div>
-        <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery mode</dt><dd className="mt-1 font-medium text-[#2B1B12]">{application.deliveryType?.replaceAll("_", " ") || application.vehicleType || "Not provided"}</dd></div>
-        {application.vehicleNumber && <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Vehicle number</dt><dd className="mt-1 font-medium text-[#2B1B12]">{application.vehicleNumber}</dd></div>}
-        {addressText && <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Service address</dt><dd className="mt-1 flex items-start gap-1.5 font-medium text-[#2B1B12]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />{addressText}</dd></div>}
-      </dl>
-    </section>
+  return <div className="mx-auto max-w-7xl space-y-6">
+    <header className="flex flex-wrap items-center gap-4 rounded-2xl border border-orange-100 bg-white p-5 shadow-sm sm:p-6">
+      {profilePhotoUrl ? <img src={profilePhotoUrl} alt={`${user.name || "Delivery agent"} profile`} className="h-20 w-20 shrink-0 rounded-full border border-gray-200 object-cover" /> : <span aria-label="Profile initials" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-orange-100 bg-red-50 text-xl font-bold text-red-700">{initials}</span>}
+      <div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-bold text-[#2B1B12]">{user.name || "Delivery agent"}</h1><p className="mt-1 text-sm text-gray-600">{[application.deliveryType?.replaceAll("_", " ") || application.vehicleType, application.vehicleNumber].filter(Boolean).join(" · ") || "Delivery profile"}</p><div className="mt-3 flex flex-wrap gap-2">{application.verificationStatus === "APPROVED" && <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800"><ShieldCheck className="h-3.5 w-3.5" />Verified agent</span>}<span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${statusStyle(application.verificationStatus)}`}>{application.verificationStatus === "APPROVED" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}{verificationLabel}</span></div></div>
+    </header>
+
+    <div className="grid items-start gap-5 lg:grid-cols-5">
+      <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm sm:p-6 lg:col-span-3" aria-labelledby="personal-details-heading">
+        <div className="flex items-center gap-3"><span className="rounded-xl bg-red-50 p-2.5 text-red-700"><UserRound className="h-5 w-5" /></span><h2 id="personal-details-heading" className="text-lg font-bold text-[#2B1B12]">Personal details</h2></div>
+        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+          {field("Email", user.email, Mail, user.email ? `mailto:${user.email}` : null)}
+          {field("Phone", user.phone, Phone, user.phone ? `tel:${user.phone}` : null)}
+          {field("Delivery mode", application.deliveryType?.replaceAll("_", " ") || application.vehicleType, Bike)}
+          {field("Vehicle number", application.vehicleNumber, FileText)}
+          <div className="sm:col-span-2">{field("Service address", addressText, MapPin)}</div>
+        </dl>
+      </section>
+
+      <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm sm:p-6 lg:col-span-2" aria-labelledby="verification-heading">
+        <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="rounded-xl bg-red-50 p-2.5 text-red-700"><ShieldCheck className="h-5 w-5" /></span><div><h2 id="verification-heading" className="text-lg font-bold text-[#2B1B12]">Verification status</h2><p className="mt-0.5 text-sm text-gray-500">{approvedCount} of {documents.length} documents approved</p></div></div><span className={`rounded-full border px-3 py-1 text-xs font-bold ${statusStyle(application.verificationStatus)}`}>{verificationLabel}</span></div>
+        <div className="mt-5 h-2 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-label="Approved verification documents" aria-valuemin={0} aria-valuemax={documents.length || 1} aria-valuenow={approvedCount}><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${documents.length ? (approvedCount / documents.length) * 100 : 0}%` }} /></div>
+        {attentionDocuments.length === 0 ? <p className="mt-4 flex items-center gap-2 text-sm font-medium text-emerald-800"><CheckCircle2 className="h-4 w-4" />All submitted documents are approved.</p> : <div className="mt-4 space-y-2"><p className="text-sm text-gray-600">These documents need attention:</p>{attentionDocuments.map((document) => <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg bg-[#F8F9FB] px-3 py-2"><span className="min-w-0 truncate text-sm font-medium text-[#2B1B12]">{labelForDocument(document)}</span><span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyle(document.verificationStatus)}`}>{document.verificationStatus?.toLowerCase()}</span></div>)}</div>}
+      </section>
+    </div>
 
     <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="documents-heading">
-      <div className="flex items-center gap-2"><FileText className="h-5 w-5 text-red-600" /><h2 id="documents-heading" className="text-lg font-extrabold text-[#2B1B12]">Verification documents</h2></div>
-      {documents.length === 0 ? <p className="mt-4 text-sm text-gray-600">No documents have been submitted.</p> : <ul className="mt-4 divide-y divide-gray-100">{documents.map((document) => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"><div className="min-w-0"><p className="font-semibold text-[#2B1B12]">{documentLabels[document.documentType] || document.documentType?.replaceAll("_", " ")}</p><p className="mt-0.5 truncate text-xs text-gray-500">{document.fileName || "Uploaded document"}{document.rejectionReason ? ` · ${document.rejectionReason}` : ""}</p></div><div className="flex items-center gap-2"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusStyle(document.verificationStatus)}`}>{document.verificationStatus?.replaceAll("_", " ") || "Unknown"}</span><button type="button" onClick={() => openPreview(document)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-[#2B1B12] transition-colors hover:border-red-300 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"><Eye className="h-3.5 w-3.5" />Preview</button></div></li>)}</ul>}
+      <div className="flex items-center gap-3"><span className="rounded-xl bg-red-50 p-2.5 text-red-700"><FileText className="h-5 w-5" /></span><div><h2 id="documents-heading" className="text-lg font-bold text-[#2B1B12]">Verification documents</h2><p className="mt-0.5 text-sm text-gray-500">Review the files submitted with your application.</p></div></div>
+      {documents.length === 0 ? <p className="mt-4 rounded-xl bg-[#F8F9FB] p-4 text-sm text-gray-600">No documents have been submitted.</p> : <ul className="mt-4 divide-y divide-gray-100">{documents.map((document) => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"><div className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F8F9FB] text-gray-600">{document.documentType === "OTHER" && document.verificationStatus === "APPROVED" && profilePhotoUrl ? <img src={profilePhotoUrl} alt="" className="h-full w-full object-cover" /> : <FileText className="h-5 w-5" />}</span><div className="min-w-0"><p className="text-sm font-semibold text-[#2B1B12]">{labelForDocument(document)}</p><p className="mt-0.5 truncate text-sm text-gray-500" title={document.fileName || "Uploaded document"}>{document.fileName || "Uploaded document"}</p>{document.verificationStatus === "REJECTED" && document.rejectionReason && <p className="mt-1 break-words text-sm text-red-700">{document.rejectionReason}</p>}</div></div><div className="flex items-center gap-2"><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyle(document.verificationStatus)}`}>{document.verificationStatus?.replaceAll("_", " ") || "Unknown"}</span><button type="button" onClick={() => openPreview(document)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-[#2B1B12] transition-colors hover:border-red-300 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"><Eye className="h-4 w-4" />Preview</button></div></li>)}</ul>}
     </section>
 
     <section id="payment-details" className="scroll-mt-6 rounded-2xl border border-orange-100 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="payout-heading">

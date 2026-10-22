@@ -8,6 +8,8 @@ import {
   listCurrentDeliveries,
   markDeliveryPickedUp,
   markDeliveryCompleted,
+  requestDeliveryCompletionOtp,
+  getDeliveryCompletionOtpStatus,
   confirmCodCollection,
   listDeliveryHistory,
   getDeliveryEarnings,
@@ -19,7 +21,7 @@ import { authenticate, requireApprovedDeliveryAgent } from "../../middlewares/au
 import { documentUpload, validateUploadedFileContent } from "../../utils/fileUpload.js";
 import { validate } from "../../middlewares/validate.js";
 import { orderIdSchema } from "../orders/orders.validation.js";
-import { deliveryAgentApplicationSchema, deliveryAgentAvailabilitySchema, deliveryAgentPayoutDetailsSchema } from "./delivery-agent.validation.js";
+import { deliveryAgentApplicationSchema, deliveryAgentAvailabilitySchema, deliveryAgentPayoutDetailsSchema, deliveryCompletionOrderParamsSchema, deliveryCompletionOtpSchema } from "./delivery-agent.validation.js";
 
 const router = express.Router();
 
@@ -41,7 +43,9 @@ router.get("/deliveries/available", requireApprovedDeliveryAgent, listAvailableD
 router.post("/deliveries/:orderId/claim", requireApprovedDeliveryAgent, claimDelivery);
 router.get("/deliveries/current", requireApprovedDeliveryAgent, listCurrentDeliveries);
 router.post("/deliveries/:orderId/pickup", requireApprovedDeliveryAgent, markDeliveryPickedUp);
-router.post("/deliveries/:orderId/complete", requireApprovedDeliveryAgent, markDeliveryCompleted);
+router.post("/deliveries/:orderId/completion-otp", requireApprovedDeliveryAgent, validate(deliveryCompletionOrderParamsSchema), requestDeliveryCompletionOtp);
+router.get("/deliveries/:orderId/completion-otp", requireApprovedDeliveryAgent, validate(deliveryCompletionOrderParamsSchema), getDeliveryCompletionOtpStatus);
+router.post("/deliveries/:orderId/complete", requireApprovedDeliveryAgent, validate(deliveryCompletionOtpSchema), markDeliveryCompleted);
 router.post("/deliveries/:id/collect-cod", requireApprovedDeliveryAgent, validate(orderIdSchema), confirmCodCollection);
 router.get("/deliveries/history", requireApprovedDeliveryAgent, listDeliveryHistory);
 router.get("/earnings", requireApprovedDeliveryAgent, getDeliveryEarnings);

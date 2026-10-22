@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "../../api/adminApi.js";
 import {
-  Sliders,
   Save,
   Loader2,
-  RefreshCw,
   CheckCircle,
   Percent,
   DollarSign,
@@ -85,22 +83,7 @@ export const AdminSettings = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <Sliders className="w-6 h-6 text-gray-800" /> Platform Settings
-          </h2>
-          <p className="text-xs text-gray-500 mt-1">Configure global platform marketplace fees and base delivery rates</p>
-        </div>
-        <button
-          onClick={refreshSettings}
-          className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Reset
-        </button>
-      </div>
+    <div className="mx-auto w-full max-w-3xl space-y-6 pb-12">
 
       {successMsg && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-in fade-in">
@@ -159,7 +142,7 @@ export const AdminSettings = () => {
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+            className="px-6 py-2.5 bg-[#D9532B] hover:bg-[#AD4324] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             <span>Save Settings</span>

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarCheck, Check, CheckCircle2, Clock, LoaderCircle, MapPin, RefreshCw, Users, X } from "lucide-react";
+import { CalendarCheck, Check, CheckCircle2, Clock, Copy, CreditCard, IndianRupee, LoaderCircle, MapPin, Search, UtensilsCrossed, UserRound, Users, X } from "lucide-react";
 import cookApi from "../../../api/cookApi.js";
 import { formatIstDateTime } from "../../../utils/istDateTime.js";
 import { getScheduledCompletionAt, isCompletionAllowed } from "../../../utils/cookExperienceBooking.js";
+import { copyBookingReference, getExperienceImage } from "../../../utils/bookingPresentation.js";
 
 const tabs = [
   { id: "PENDING", label: "Requests" },
@@ -21,6 +22,174 @@ const readItems = (response) => {
 };
 
 const formatDate = formatIstDateTime;
+
+const formatTime = (value) => {
+  if (!value || !Number.isFinite(new Date(value).getTime())) return "Time unavailable";
+  return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+};
+
+const formatBookingSchedule = (start, end) => {
+  if (!end) return formatDate(start);
+  if (!start || !Number.isFinite(new Date(start).getTime()) || !Number.isFinite(new Date(end).getTime())) return `${formatDate(start)} – ${formatDate(end)}`;
+  const startDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(start));
+  const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(end));
+  return `${formatDate(start)} – ${startDate === endDate ? formatTime(end) : formatDate(end)}`;
+};
+
+const formatBookingAmount = (booking, isWorkshop = false) => {
+  if (!isWorkshop) {
+    const snapshot = booking.totalAmountSnapshot ?? booking.totalAmount;
+    const amount = snapshot !== null && snapshot !== undefined
+      ? Number(snapshot)
+      : Number(booking.pricePerPersonSnapshot ?? booking.pricePerPerson ?? booking.experience?.pricePerPerson) * Number(booking.numberOfGuests);
+    if (!Number.isFinite(amount)) return "—";
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
+  }
+
+  const toAmount = (value) => value === null || value === undefined || value === "" ? null : Number(value);
+  const succeededPayment = booking.paymentAttempts?.find((attempt) => ["SUCCEEDED", "PAID"].includes(String(attempt.status || "").toUpperCase()));
+  const savedAmounts = [booking.totalAmountSnapshot, booking.totalAmount, booking.amountPaid, booking.paidAmount, succeededPayment?.amount]
+    .map(toAmount);
+  let amount = savedAmounts.find(Number.isFinite);
+  if (amount === undefined) {
+    const price = toAmount(booking.pricePerPersonSnapshot ?? booking.pricePerPerson ?? booking.experience?.pricePerPerson);
+    const guests = toAmount(booking.numberOfGuests);
+    if (Number.isFinite(price) && Number.isFinite(guests)) amount = price * guests;
+  }
+  if (!Number.isFinite(amount)) return "—";
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+};
+
+const paymentLabel = (status) => ["SUCCEEDED", "PAID"].includes(String(status || "UNPAID").toUpperCase()) ? "PAID" : "UNPAID";
+
+function BookingExperienceImage({ experience, isWorkshop = false }) {
+  const categories = experience.theme ? [{ name: experience.theme, slug: experience.theme }] : [];
+  const image = isWorkshop
+    ? { src: experience.image || experience.photos?.[0] || null, alt: experience.title || "Workshop poster" }
+    : getExperienceImage(experience, 800, categories);
+  const [failedSource, setFailedSource] = useState(null);
+  const imageClass = `aspect-video w-full rounded-xl min-[768px]:aspect-[4/3] min-[768px]:w-[200px] ${isWorkshop ? "bg-[#F2ECE4] object-contain" : "object-cover"}`;
+  if (!image.src || failedSource === image.src) return <div className="grid aspect-video w-full place-items-center rounded-xl bg-[#F7F2EC] text-[#A89A89] min-[768px]:aspect-[4/3] min-[768px]:w-[200px]" aria-label="Experience image unavailable"><UtensilsCrossed className="h-8 w-8" aria-hidden="true" /></div>;
+  return <img src={image.src} alt={image.alt || experience.title || "Dining experience"} loading="lazy" onError={() => setFailedSource(image.src)} className={imageClass} />;
+}
+
+function StatusBadge({ booking }) {
+  const className = booking.status === "COMPLETED" ? "bg-green-50 text-green-700"
+    : booking.status === "CANCELLED" ? "bg-gray-100 text-gray-600"
+      : booking.cancellationStatus === "PENDING" ? "border border-amber-300 bg-amber-100 text-amber-900"
+        : "bg-amber-50 text-amber-800";
+  return <span className={`inline-flex min-h-7 items-center rounded-full px-3 py-1 text-xs font-bold ${className}`}>{booking.cancellationStatus === "PENDING" ? "Cancellation requested" : booking.status.replaceAll("_", " ")}</span>;
+}
+
+function PaymentBadge({ status }) {
+  const label = paymentLabel(status);
+  const paid = label === "PAID";
+  return <span className={`inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs font-bold ${paid ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-800"}`}>{label}</span>;
+}
+
+function BookingTabs({ activeTab, bookings, onSelect }) {
+  return <nav aria-label="Booking status tabs" className="flex min-w-0 items-center gap-2 overflow-x-auto border-b border-[#2B1B12]/10 pb-2 scrollbar-none">
+    {tabs.map((tab) => {
+      const count = bookings.filter((booking) => booking.status === tab.id).length;
+      const active = activeTab === tab.id;
+      return <button key={tab.id} type="button" onClick={() => onSelect(tab.id)} aria-pressed={active} className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-sm font-bold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] focus-visible:ring-offset-2 ${active ? "border-[#D2552B] bg-[#D2552B] text-white" : "border-[#2B1B12]/10 bg-white text-[#2B1B12]/70 hover:bg-[#D2552B]/10"}`}>
+        <span>{tab.label}</span><span className={`rounded-full px-1.5 py-0.5 text-xs font-extrabold ${active ? "bg-white/25 text-white" : "bg-gray-100 text-gray-700"}`}>{count}</span>
+      </button>;
+    })}
+  </nav>;
+}
+
+function BookingDetails({ booking, isWorkshop = false }) {
+  const experience = booking.experience || {};
+  const start = booking.slot?.startsAt || booking.bookingDate;
+  const end = booking.slot?.endsAt;
+  const attemptStatus = booking.paymentAttempts?.[0]?.status || "UNPAID";
+  return <div className="grid gap-4 min-[768px]:grid-cols-[200px_minmax(0,1fr)] min-[768px]:items-start">
+    <BookingExperienceImage experience={experience} isWorkshop={isWorkshop} />
+    <dl className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 min-[768px]:grid-cols-2">
+      <div className="min-w-0"><dt className="flex items-center gap-1.5 text-xs text-[#2B1B12]/55"><Clock size={14} aria-hidden="true" />Date & time</dt><dd className="mt-1 text-sm font-medium text-[#2B1B12]">{formatBookingSchedule(start, end)}</dd></div>
+      <div className="min-w-0"><dt className="flex items-center gap-1.5 text-xs text-[#2B1B12]/55"><MapPin size={14} aria-hidden="true" />Location</dt><dd className="mt-1 text-sm font-medium text-[#2B1B12]">{experience.location || "Venue details unavailable"}</dd></div>
+      <div><dt className="flex items-center gap-1.5 text-xs text-[#2B1B12]/55"><Users size={14} aria-hidden="true" />Guests</dt><dd className="mt-1 text-sm font-medium text-[#2B1B12]">{booking.numberOfGuests} {booking.numberOfGuests === 1 ? "guest" : "guests"}</dd></div>
+      <div className="min-w-0"><dt className="flex items-center gap-1.5 text-xs text-[#2B1B12]/55"><UserRound size={14} aria-hidden="true" />Customer</dt><dd className="mt-1 truncate text-sm font-medium text-[#2B1B12]" title={booking.customer?.name || "TasteBridge customer"}>{booking.customer?.name || "TasteBridge customer"}</dd></div>
+      <div><dt className="flex items-center gap-1.5 text-xs text-[#2B1B12]/55"><IndianRupee size={14} aria-hidden="true" />Amount</dt><dd className="mt-1 text-sm font-bold text-[#2B1B12]">{formatBookingAmount(booking, isWorkshop)}</dd></div>
+      <div><dt className="flex items-center gap-1.5 text-xs text-[#2B1B12]/55"><CreditCard size={14} aria-hidden="true" />Payment</dt><dd className="mt-1"><PaymentBadge status={attemptStatus} /></dd></div>
+      {booking.paymentAttempts?.[0]?.refund && <div><dt className="text-xs text-[#2B1B12]/55">Refund</dt><dd className="mt-1 text-sm font-medium text-[#2B1B12]">{booking.paymentAttempts[0].refund.status}{booking.paymentAttempts[0].refund.provider === "SIMULATED" ? " (simulated)" : ""}</dd></div>}
+    </dl>
+  </div>;
+}
+
+function BookingCard({ booking, actingId, now, isWorkshop = false, onDecide, onComplete, onApproveCancellation, onRequestRejectCancellation }) {
+  const [copied, setCopied] = useState(false);
+  const title = booking.experience?.title || "TasteBridge experience";
+  const message = booking.status === "PENDING" ? "Review and respond to this booking request."
+    : booking.status === "ACCEPTED" ? "This booking is awaiting customer payment."
+      : booking.status === "CONFIRMED" ? "This reservation is confirmed."
+        : booking.status === "COMPLETED" ? "This experience has been completed."
+          : booking.status === "REJECTED" ? "This booking request was declined."
+            : booking.status === "EXPIRED" ? "The booking request expired without confirmation."
+              : "This booking has been cancelled.";
+  const copyReference = async () => {
+    try { await copyBookingReference(booking.id); setCopied(true); }
+    catch { setCopied(false); }
+  };
+
+  return <article className="rounded-2xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:shadow-md sm:p-6">
+    <header className="flex flex-col gap-3 min-[768px]:flex-row min-[768px]:items-center min-[768px]:justify-between">
+      <div className="min-w-0">
+        <h2 className="truncate text-base font-extrabold text-[#2B1B12] sm:text-lg" title={title}>{title}</h2>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-[#2B1B12]/60">
+          <span className="shrink-0">Booking ref:</span><span className="min-w-0 truncate" title={booking.id}>{booking.id}</span>
+          <button type="button" onClick={() => void copyReference()} aria-label="Copy reference" title={copied ? "Copied" : "Copy reference"} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#2B1B12]/60 transition-colors hover:bg-orange-50 hover:text-[#D2552B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]"><Copy size={15} aria-hidden="true" /></button>
+        </div>
+      </div>
+      <div className="flex shrink-0 self-start min-[768px]:self-center"><StatusBadge booking={booking} /></div>
+    </header>
+
+    <div className="my-4 border-t border-[#2B1B12]/10" />
+    <BookingDetails booking={booking} isWorkshop={isWorkshop} />
+
+    <footer className="mt-4 flex flex-col gap-3 border-t border-[#2B1B12]/10 pt-4 min-[768px]:flex-row min-[768px]:items-center min-[768px]:justify-between">
+      <p className="text-sm text-[#2B1B12]/60">{message}</p>
+      <div className="flex w-full flex-col gap-2 min-[768px]:w-auto min-[768px]:shrink-0 min-[768px]:flex-row min-[768px]:gap-3">
+        {booking.status === "PENDING" && <>
+          <button type="button" onClick={() => void onDecide(booking, "accept")} disabled={Boolean(actingId)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#3E5B3A] px-4 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60 min-[768px]:w-auto">
+            {actingId === booking.id ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}Accept
+          </button>
+          <button type="button" onClick={() => void onDecide(booking, "reject")} disabled={Boolean(actingId)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-60 min-[768px]:w-auto">
+            {actingId === booking.id ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <X size={16} aria-hidden="true" />}Reject
+          </button>
+        </>}
+        {booking.status === "ACCEPTED" && <span className="inline-flex min-h-11 items-center text-sm font-medium text-amber-800">Awaiting customer payment</span>}
+        {booking.status === "CONFIRMED" && (
+          booking.cancellationStatus === "PENDING" ? <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-900">Awaiting cancellation decision</span>
+            : isCompletionAllowed(booking, now) ? <button type="button" onClick={() => void onComplete(booking)} disabled={Boolean(actingId)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#D2552B] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 min-[768px]:w-auto">{actingId === booking.id ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}Mark completed</button>
+              : <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50 px-3 text-xs font-medium text-blue-800" title={(() => { const end = getScheduledCompletionAt(booking); return end ? `Can be completed after ${formatDate(end)}` : "Authoritative schedule timestamp unavailable"; })()}><Clock size={13} aria-hidden="true" />{(() => { const start = booking.slot?.startsAt || booking.bookingDate; const startDate = start ? new Date(start) : null; return startDate && Number.isFinite(startDate.getTime()) && now >= startDate ? "Experience in progress" : "Experience scheduled"; })()}</span>
+        )}
+      </div>
+    </footer>
+
+    {booking.cancellationStatus === "PENDING" && <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-sm text-amber-950">
+      <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-bold uppercase tracking-wider text-amber-900 text-xs">Guest cancellation request</span>{booking.cancellationRequestedAt && <span className="text-xs text-amber-800/80">Requested {formatDate(booking.cancellationRequestedAt)}</span>}</div>
+      <div className="mt-2 rounded-lg border border-amber-200 bg-white/90 p-3"><p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Reason provided by guest:</p><p className="text-sm font-medium text-[#2B1B12]">“{booking.cancellationReason}”</p></div>
+      <div className="mt-3 flex flex-wrap items-center gap-2.5">
+        <button type="button" onClick={() => void onApproveCancellation(booking)} disabled={Boolean(actingId)} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-red-700 px-3.5 text-sm font-bold text-white hover:bg-red-800 disabled:cursor-wait disabled:opacity-60">{actingId === booking.id ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />}Approve Cancellation</button>
+        <button type="button" onClick={() => onRequestRejectCancellation(booking)} disabled={Boolean(actingId)} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60"><X size={15} />Reject Cancellation</button>
+      </div>
+    </div>}
+    {booking.cancellationStatus === "REJECTED" && <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><span className="font-semibold text-gray-900">Cancellation request declined</span>{booking.cancellationDecisionReason && <span className="ml-1 text-gray-600">— Reason: “{booking.cancellationDecisionReason}”</span>}</div>}
+    {booking.status === "CANCELLED" && booking.cancellationReason && <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><span className="font-semibold text-gray-900">Cancellation reason:</span> “{booking.cancellationReason}”</div>}
+    {booking.status === "COMPLETED" && booking.completedAt && <p className="mt-3 text-xs text-green-700">Completed {formatDate(booking.completedAt)}</p>}
+  </article>;
+}
+
+function EmptyState({ activeTab, isWorkshop }) {
+  const activeLabel = tabs.find((tab) => tab.id === activeTab)?.label.toLowerCase();
+  return <section className="space-y-3 rounded-2xl border border-dashed border-[#2B1B12]/20 bg-white p-8 text-center shadow-xs sm:p-12" aria-label="No bookings">
+    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#3E5B3A]/10 text-[#3E5B3A]"><CalendarCheck className="h-7 w-7" aria-hidden="true" /></div>
+    <h2 className="text-lg font-bold text-[#2B1B12]">{activeTab === "PENDING" ? "No booking requests yet" : `No ${activeLabel} bookings yet`}</h2>
+    <p className="text-sm text-[#2B1B12]/60">Reservations for your {isWorkshop ? "workshops" : "dining experiences"} will appear here.</p>
+  </section>;
+}
 
 export const CookBookingsPage = ({ experienceType = "HOME_DINING" }) => {
   const isWorkshop = experienceType === "WORKSHOP";
@@ -71,6 +240,12 @@ export const CookBookingsPage = ({ experienceType = "HOME_DINING" }) => {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [loadBookings]);
+
+  useEffect(() => {
+    if (!isWorkshop || !actionSuccess) return undefined;
+    const timeoutId = window.setTimeout(() => setActionSuccess(""), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [actionSuccess, isWorkshop]);
 
   const matchingBookings = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
@@ -191,168 +366,55 @@ export const CookBookingsPage = ({ experienceType = "HOME_DINING" }) => {
   };
 
   return (
-    <div className="space-y-6 text-left animate-in fade-in duration-200">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className={`space-y-6 text-left animate-in fade-in duration-200 ${isWorkshop ? "-mt-4 pt-6 sm:-mt-6 lg:-mt-8" : ""}`}>
+      {isWorkshop ? (
         <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-[#2B1B12] tracking-tight">{isWorkshop ? "Workshop Bookings" : "Dine Bookings"}</h2>
-          <p className="text-xs sm:text-sm text-[#2B1B12]/70 mt-1">Review {isWorkshop ? "workshop" : "home dining"} reservations and their status.</p>
+          <h1 className="sr-only">Workshop Bookings</h1>
+          <div className="space-y-4">
+            <BookingTabs activeTab={activeTab} bookings={bookings} onSelect={(tab) => { setPage(1); setActionSuccess(""); setActiveTab(tab); }} />
+            <label className="block w-full max-w-[560px]">
+              <span className="sr-only">Search Workshop bookings</span>
+              <span className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search workshop, customer, or reference" className="h-11 w-full rounded-xl border border-[#2B1B12]/15 bg-white pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#D2552B]" /></span>
+            </label>
+          </div>
         </div>
-        <button type="button" onClick={() => void loadBookings()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-[#2B1B12]/15 bg-white px-3 py-2 text-sm font-semibold text-[#2B1B12] hover:bg-[#D2552B]/5 disabled:opacity-60">
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Refresh
-        </button>
-      </div>
-
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#2B1B12]/10">
-        {tabs.map((tab) => (
-          <button key={tab.id} type="button" onClick={() => { setPage(1); setActiveTab(tab.id); }} aria-pressed={activeTab === tab.id} className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${activeTab === tab.id ? "bg-[#D2552B] text-white" : "bg-white text-[#2B1B12]/70 hover:bg-[#D2552B]/10 border border-[#2B1B12]/10"}`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <label className="block max-w-lg">
-        <span className="sr-only">Search {isWorkshop ? "Workshop" : "Dine"} bookings</span>
-        <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={`Search ${isWorkshop ? "workshop" : "experience"}, customer, or reference`} className="w-full rounded-xl border border-[#2B1B12]/15 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#D2552B]" />
-      </label>
+      ) : (
+        <>
+          <h1 className="sr-only">Dine Bookings</h1>
+          <div className="space-y-4">
+            <BookingTabs activeTab={activeTab} bookings={bookings} onSelect={(tab) => { setPage(1); setActiveTab(tab); }} />
+            <label className="block w-full max-w-[560px]">
+              <span className="sr-only">Search Dine bookings</span>
+              <span className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search experience, customer, or reference" className="h-11 w-full rounded-xl border border-[#2B1B12]/15 bg-white pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#D2552B]" /></span>
+            </label>
+          </div>
+        </>
+      )}
 
       {actionError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{actionError}</div>}
-      {actionSuccess && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{actionSuccess}</div>}
+      {actionSuccess && <div role="status" className={`flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800 ${isWorkshop ? "min-h-11 -mb-2" : ""}`}><span>{actionSuccess}</span>{isWorkshop && <button type="button" aria-label="Dismiss" onClick={() => setActionSuccess("")} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700"><X size={16} aria-hidden="true" /></button>}</div>}
       {loading ? (
-        <div role="status" className="flex items-center justify-center gap-2 rounded-3xl border border-[#2B1B12]/10 bg-white p-12 text-[#2B1B12]/70"><LoaderCircle className="animate-spin" size={20} /> Loading event bookings…</div>
+        <section role="status" aria-label="Loading event bookings" className="space-y-5"><span className="sr-only">Loading event bookings…</span>{[1, 2, 3].map((item) => <div key={item} className="animate-pulse rounded-2xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm sm:p-6"><div className="flex justify-between gap-4"><div className="h-5 w-48 rounded bg-orange-100" /><div className="h-7 w-24 rounded-full bg-orange-100" /></div><div className="mt-4 grid gap-4 sm:grid-cols-[180px_1fr]"><div className="aspect-[4/3] rounded-xl bg-[#F2ECE4]" /><div className="grid grid-cols-2 gap-4"><div className="h-10 rounded bg-gray-100" /><div className="h-10 rounded bg-gray-100" /><div className="h-10 rounded bg-gray-100" /><div className="h-10 rounded bg-gray-100" /></div></div></div>)}</section>
       ) : error ? (
         <div className="rounded-3xl border border-red-200 bg-white p-8 text-center">
           <p role="alert" className="text-sm text-red-700">{error}</p>
           <button type="button" onClick={() => void loadBookings()} className="mt-4 rounded-xl bg-[#D2552B] px-4 py-2 text-sm font-bold text-white">Retry</button>
         </div>
       ) : visibleBookings.length === 0 ? (
-        <div className="bg-white rounded-3xl border border-[#2B1B12]/10 p-8 sm:p-14 text-center space-y-3 shadow-xs">
-          <div className="w-16 h-16 rounded-3xl bg-[#3E5B3A]/10 text-[#3E5B3A] flex items-center justify-center mx-auto"><CalendarCheck className="w-8 h-8" /></div>
-          <h3 className="text-lg font-bold text-[#2B1B12]">No {tabs.find((tab) => tab.id === activeTab)?.label.toLowerCase()} bookings</h3>
-          <p className="text-xs sm:text-sm text-[#2B1B12]/60">Reservations for your {isWorkshop ? "workshops" : "dining experiences"} will appear here.</p>
-        </div>
+        <EmptyState activeTab={activeTab} isWorkshop={isWorkshop} />
       ) : (
-        <div className="space-y-3">
-          {visibleBookings.map((booking) => (
-            <article key={booking.id} className="rounded-2xl border border-[#2B1B12]/10 bg-white p-4 sm:p-5 shadow-xs">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h3 className="font-bold text-[#2B1B12]">{booking.experience?.title || "TasteBridge experience"}</h3>
-                  <p className="mt-1 text-xs text-[#2B1B12]/60">Booking reference: {booking.id}</p>
-                  <div className="mt-3 grid gap-2 text-sm text-[#2B1B12]/75 sm:grid-cols-2">
-                    <span className="inline-flex items-center gap-2"><Clock size={15} />{formatDate(booking.slot?.startsAt || booking.bookingDate)}{booking.slot?.endsAt ? ` – ${formatDate(booking.slot.endsAt)}` : ""}</span>
-                    <span className="inline-flex items-center gap-2"><MapPin size={15} />{booking.experience?.location || "Venue details unavailable"}</span>
-                    <span className="inline-flex items-center gap-2"><Users size={15} />{booking.numberOfGuests} {booking.numberOfGuests === 1 ? "guest" : "guests"}</span>
-                    <span>Customer: {booking.customer?.name || "TasteBridge customer"}</span>
-                    <span>Amount: ₹{Number(booking.totalAmountSnapshot ?? booking.totalAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    <span>Payment: {booking.paymentAttempts?.[0]?.status || "UNPAID"}</span>
-                    {booking.paymentAttempts?.[0]?.refund && <span>Refund: {booking.paymentAttempts[0].refund.status}{booking.paymentAttempts[0].refund.provider === "SIMULATED" ? " (simulated)" : ""}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${booking.status === "COMPLETED" ? "bg-green-50 text-green-700" : booking.status === "CANCELLED" ? "bg-gray-100 text-gray-600" : booking.cancellationStatus === "PENDING" ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-amber-50 text-amber-800"}`}>
-                    {booking.cancellationStatus === "PENDING" ? "Cancellation requested" : booking.status.replaceAll("_", " ")}
-                  </span>
-                  {booking.status === "PENDING" && <>
-                    <button type="button" onClick={() => void decideBooking(booking, "accept")} disabled={Boolean(actingId)} className="inline-flex items-center gap-2 rounded-xl bg-[#3E5B3A] px-3 py-2 text-xs font-bold text-white disabled:cursor-wait disabled:opacity-60">
-                      {actingId === booking.id ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Accept
-                    </button>
-                    <button type="button" onClick={() => void decideBooking(booking, "reject")} disabled={Boolean(actingId)} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 disabled:cursor-wait disabled:opacity-60">
-                      {actingId === booking.id ? <LoaderCircle size={15} className="animate-spin" /> : <X size={15} />} Reject
-                    </button>
-                  </>}
-                  {booking.status === "ACCEPTED" && <span className="text-xs font-medium text-amber-800">Awaiting customer payment</span>}
-                  {booking.status === "CONFIRMED" && (
-                    booking.cancellationStatus === "PENDING" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900 border border-amber-200">
-                        Awaiting cancellation decision
-                      </span>
-                    ) : isCompletionAllowed(booking, now) ? (
-                      <button
-                        type="button"
-                        onClick={() => void completeBooking(booking)}
-                        disabled={Boolean(actingId)}
-                        className="inline-flex items-center gap-2 rounded-xl bg-[#D2552B] px-3 py-2 text-xs font-bold text-white disabled:cursor-wait disabled:opacity-60"
-                      >
-                        {actingId === booking.id ? <LoaderCircle size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Mark completed
-                      </button>
-                    ) : (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800 border border-blue-200/80"
-                        title={(() => {
-                          const end = getScheduledCompletionAt(booking);
-                          return end ? `Can be completed after ${formatDate(end)}` : "Authoritative schedule timestamp unavailable";
-                        })()}
-                      >
-                        <Clock size={13} aria-hidden="true" />
-                        {(() => {
-                          const startRaw = booking.slot?.startsAt || booking.bookingDate;
-                          const start = startRaw ? new Date(startRaw) : null;
-                          const isStarted = start && Number.isFinite(start.getTime()) && now >= start;
-                          return isStarted ? "Experience in progress" : "Experience scheduled";
-                        })()}
-                      </span>
-                    )
-                  )}
-                </div>
-              </div>
-
-              {/* Pending Cancellation Review Banner */}
-              {booking.cancellationStatus === "PENDING" && (
-                <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-xs text-amber-950">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-bold uppercase tracking-wider text-amber-900 text-[11px]">Guest cancellation request</span>
-                    {booking.cancellationRequestedAt && (
-                      <span className="text-amber-800/80">Requested {formatDate(booking.cancellationRequestedAt)}</span>
-                    )}
-                  </div>
-                  <div className="mt-2 rounded-lg bg-white/90 p-3 border border-amber-200">
-                    <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Reason provided by guest:</p>
-                    <p className="text-sm font-medium text-[#2B1B12]">“{booking.cancellationReason}”</p>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => void handleApproveCancellation(booking)}
-                      disabled={Boolean(actingId)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-red-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-red-800 disabled:cursor-wait disabled:opacity-60 shadow-xs"
-                    >
-                      {actingId === booking.id ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />} Approve Cancellation
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRejectModalBooking(booking);
-                        setRejectionReason("");
-                      }}
-                      disabled={Boolean(actingId)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 shadow-xs"
-                    >
-                      <X size={14} /> Reject Cancellation
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Cook Rejection Decision Banner */}
-              {booking.cancellationStatus === "REJECTED" && (
-                <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-2.5 text-xs text-gray-700">
-                  <span className="font-semibold text-gray-900">Cancellation request declined</span>
-                  {booking.cancellationDecisionReason && (
-                    <span className="ml-1 text-gray-600">— Reason: “{booking.cancellationDecisionReason}”</span>
-                  )}
-                </div>
-              )}
-
-              {/* Cancelled booking reason */}
-              {booking.status === "CANCELLED" && booking.cancellationReason && (
-                <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-2.5 text-xs text-gray-700">
-                  <span className="font-semibold text-gray-900">Cancellation reason:</span> “{booking.cancellationReason}”
-                </div>
-              )}
-
-              {booking.status === "COMPLETED" && booking.completedAt && <p className="mt-3 text-xs text-green-700">Completed {formatDate(booking.completedAt)}</p>}
-            </article>
-          ))}
+        <div className="space-y-5">
+          {visibleBookings.map((booking) => <BookingCard
+            key={booking.id}
+            booking={booking}
+            actingId={actingId}
+            now={now}
+            isWorkshop={isWorkshop}
+            onDecide={decideBooking}
+            onComplete={completeBooking}
+            onApproveCancellation={handleApproveCancellation}
+            onRequestRejectCancellation={(selected) => { setRejectModalBooking(selected); setRejectionReason(""); }}
+          />)}
         </div>
       )}
 

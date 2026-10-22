@@ -5,7 +5,6 @@ import {
   MapPin,
   ShieldCheck,
   Award,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   Camera,
@@ -13,14 +12,12 @@ import {
   Save,
   X,
   Loader2,
-  Power,
-  UtensilsCrossed,
-  Clock,
-  Heart,
 } from "lucide-react";
 import cookApi from "../../../api/cookApi.js";
 import { updateUserProfile } from "../../../store/slices/authSlice.js";
 import { getCookFssaiStatusMessage } from "../../../utils/fssaiStatus.js";
+
+const MissingValue = ({ onAdd }) => <span className="text-gray-500">Not added yet <button type="button" onClick={onAdd} className="ml-1 font-semibold text-[#D2552B] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]">Add</button></span>;
 
 export const CookKitchenPage = () => {
   const { user } = useSelector((state) => state.auth);
@@ -28,6 +25,7 @@ export const CookKitchenPage = () => {
 
   const [kitchen, setKitchen] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -92,6 +90,7 @@ export const CookKitchenPage = () => {
       setLoading(true);
       const res = await cookApi.getKitchenProfile();
       const data = res.data?.data || res.data;
+      setLoadError(false);
       if (data) {
         setKitchen(data);
         setFssaiDetails({
@@ -115,6 +114,7 @@ export const CookKitchenPage = () => {
         });
       }
     } catch (err) {
+      setLoadError(true);
       setFeedback({
         type: "error",
         message: err.response?.data?.message || err.message || "Failed to load kitchen profile.",
@@ -127,43 +127,6 @@ export const CookKitchenPage = () => {
   useEffect(() => {
     fetchKitchenProfile();
   }, []);
-
-  // Handle direct toggle of Open/Closed status
-  const handleToggleStatus = async () => {
-    if (!kitchen || saving) return;
-    const newStatus = !kitchen.isOpen;
-    try {
-      setSaving(true);
-      const res = await cookApi.updateKitchenProfile({ isOpen: newStatus });
-      const updated = res.data?.data || res.data;
-      setKitchen(updated);
-      setFormData((prev) => ({ ...prev, isOpen: newStatus }));
-      
-      // Update global auth user state so header & marketplace stay synchronized
-      if (user?.cookProfile) {
-        dispatch(
-          updateUserProfile({
-            cookProfile: {
-              ...user.cookProfile,
-              isOpen: newStatus,
-            },
-          })
-        );
-      }
-
-      setFeedback({
-        type: "success",
-        message: newStatus ? "Kitchen is now Open for customer orders!" : "Kitchen is now Closed for orders.",
-      });
-    } catch (err) {
-      setFeedback({
-        type: "error",
-        message: err.response?.data?.message || "Failed to update kitchen status.",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // Handle Photo File Upload
   const handlePhotoSelect = async (e) => {
@@ -289,38 +252,35 @@ export const CookKitchenPage = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6 text-left animate-pulse">
-        <div className="h-8 bg-amber-100/60 rounded-xl w-64" />
-        <div className="h-4 bg-amber-100/40 rounded-lg w-96" />
-        <div className="h-80 bg-white rounded-3xl border border-[#2B1B12]/10 p-6 flex flex-col justify-between">
-          <div className="h-32 bg-orange-100/40 rounded-2xl w-full" />
-          <div className="flex gap-4">
-            <div className="w-24 h-24 rounded-2xl bg-amber-200/50" />
-            <div className="space-y-2 flex-1">
-              <div className="h-6 bg-amber-100/60 rounded-lg w-48" />
-              <div className="h-4 bg-amber-100/40 rounded-lg w-32" />
-            </div>
-          </div>
-        </div>
+      <div role="status" aria-label="Loading kitchen profile" className="space-y-6 text-left animate-pulse">
+        <div className="flex items-center gap-4 rounded-xl border border-[#2B1B12]/10 bg-white p-5"><div className="h-20 w-20 rounded-full bg-amber-100" /><div className="flex-1 space-y-3"><div className="h-6 w-48 rounded-lg bg-amber-100/70" /><div className="h-4 w-32 rounded-lg bg-amber-100/50" /></div><div className="h-11 w-32 rounded-xl bg-orange-100" /></div>
+        <div className="grid gap-4 md:grid-cols-3"><div className="space-y-4 md:col-span-2"><div className="h-36 rounded-xl border border-[#2B1B12]/10 bg-white" /><div className="h-52 rounded-xl border border-[#2B1B12]/10 bg-white" /><div className="h-24 rounded-xl border border-[#2B1B12]/10 bg-white" /></div><div className="space-y-4"><div className="h-40 rounded-xl border border-[#2B1B12]/10 bg-white" /><div className="h-64 rounded-xl border border-[#2B1B12]/10 bg-white" /></div></div>
       </div>
     );
   }
 
-  const businessName = kitchen?.businessName || user?.name || "Authentic Home Kitchen";
-  const city = kitchen?.city || "Local City";
-  const locality = kitchen?.locality || "Neighborhood";
-  const serviceArea = kitchen?.serviceArea || "Within 5 km radius";
-  const cuisines = Array.isArray(kitchen?.cuisines) && kitchen.cuisines.length > 0
-    ? kitchen.cuisines
-    : ["Traditional Home Recipes", "Regional Heritage"];
-  const bio = kitchen?.bio || "Preparing treasured ancestral recipes handed down through generations with fresh, wholesome ingredients.";
-  const whoTaughtCooking = kitchen?.whoTaughtCooking || "Learned traditional family heritage recipes passed down over generations.";
-  const experienceYears = kitchen?.experienceYears || "5+ Years";
-  const signatureDishes = kitchen?.signatureDishes || "Heritage specialties prepared fresh daily.";
+  if (loadError && !kitchen) {
+    return <div role="alert" className="rounded-xl border border-red-200 bg-white p-6 text-left"><p className="text-sm text-red-800">{feedback?.message || "Failed to load kitchen profile."}</p><button type="button" onClick={fetchKitchenProfile} className="mt-4 min-h-11 rounded-lg bg-[#D2552B] px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] focus-visible:ring-offset-2">Retry</button></div>;
+  }
+
+  const businessName = kitchen?.businessName || user?.name || "Not added yet";
+  const city = kitchen?.city || "";
+  const locality = kitchen?.locality || "";
+  const locationLine = [locality, city].filter(Boolean).join(", ") || "Not added yet";
+  const serviceArea = kitchen?.serviceArea || "";
+  const cuisines = Array.isArray(kitchen?.cuisines) ? kitchen.cuisines : [];
+  const bio = kitchen?.bio || "";
+  const whoTaughtCooking = kitchen?.whoTaughtCooking || "";
+  const experienceYears = kitchen?.experienceYears ?? "";
+  const signatureDishes = kitchen?.signatureDishes || "";
   const isOpen = kitchen?.isOpen !== false;
+  const isVerified = kitchen?.verificationStatus === "APPROVED";
+  const fssaiStatus = getCookFssaiStatusMessage(kitchen?.fssaiStatus, kitchen?.fssaiExpiryDate, kitchen?.fssaiRejectionReason);
+  const fssaiNumber = kitchen?.fssaiNumber || "";
+  const maskedFssaiNumber = fssaiNumber ? `••••••••••${fssaiNumber.slice(-4)}` : "Not added yet";
 
   return (
-    <div className="space-y-8 text-left animate-in fade-in duration-200 pb-12">
+    <main className="space-y-6 pb-10 text-left animate-in fade-in duration-200">
       {/* Hidden File Input for Kitchen Photo */}
       <input
         type="file"
@@ -329,60 +289,6 @@ export const CookKitchenPage = () => {
         accept="image/png, image/jpeg, image/jpg, image/webp"
         className="hidden"
       />
-
-      {/* Header with Title and Mode Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-[#2B1B12] tracking-tight">
-            Kitchen profile
-          </h2>
-          <p className="text-xs sm:text-sm text-[#2B1B12]/70 mt-1">
-            Manage your home kitchen identity, cooking heritage, operating status, and menu presence.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          {/* Quick Open/Closed Status Toggle */}
-          <button
-            type="button"
-            onClick={handleToggleStatus}
-            disabled={saving}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer border ${
-              isOpen
-                ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-                : "bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200"
-            }`}
-            title="Click to toggle kitchen ordering status"
-          >
-            <Power className={`w-3.5 h-3.5 ${isOpen ? "text-emerald-600" : "text-stone-500"}`} />
-            <span>{isOpen ? "Kitchen Open" : "Kitchen Closed"}</span>
-          </button>
-
-          {!isEditing ? (
-            <button
-              onClick={() => {
-                setIsEditing(true);
-                setFeedback(null);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#D2552B] hover:bg-[#C4461C] text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit Kitchen</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setIsEditing(false);
-                setFeedback(null);
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#2B1B12]/20 hover:bg-stone-50 text-[#2B1B12] rounded-xl text-xs font-bold transition-all cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Cancel</span>
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* Feedback Banner */}
       {feedback && (
@@ -398,271 +304,95 @@ export const CookKitchenPage = () => {
           ) : (
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
           )}
-          <span>{feedback.message}</span>
+          <span className="flex-1">{feedback.message}</span>
+          {loadError && <button type="button" onClick={() => { setFeedback(null); void fetchKitchenProfile(); }} className="min-h-11 rounded-lg px-3 text-sm font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]">Retry</button>}
         </div>
       )}
 
-      {/* Main Kitchen Card */}
-      <div className="bg-white rounded-3xl border border-[#2B1B12]/10 overflow-hidden shadow-xs">
-        {/* Cover Graphic Banner */}
-        <div className="h-36 sm:h-48 bg-gradient-to-r from-[#D2552B] via-[#E27042] to-[#F4A52A] relative flex items-end p-6">
-          <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-white text-xs font-semibold select-none cursor-default">
-            {kitchen?.verificationStatus === "APPROVED" ? (
-              <>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Verified Cook</span>
-              </>
-            ) : kitchen?.verificationStatus === "PENDING" ? (
-              <>
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Pending Verification</span>
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="w-3.5 h-3.5 text-stone-300" />
-                <span>Cook Profile</span>
-              </>
-            )}
+      <section className="rounded-xl border border-[#2B1B12]/10 bg-white p-4 shadow-sm sm:p-6" aria-label="Kitchen profile header">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="relative shrink-0">
+            <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-full border border-[#2B1B12]/10 bg-[#FFF8F0] text-[#F4A52A]">
+              {kitchen?.profileImage ? <img src={kitchen.profileImage} alt={businessName} className="h-full w-full object-cover" /> : <ChefHat aria-hidden="true" className="h-9 w-9" />}
+            </div>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto} aria-label="Change kitchen photo" className="absolute -bottom-1 -right-1 grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-[#2B1B12] shadow-sm transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] disabled:opacity-60">
+              {uploadingPhoto ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : <Camera aria-hidden="true" className="h-4 w-4" />}
+            </button>
           </div>
-
-          <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md text-white shadow-xs bg-black/30">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isOpen ? "bg-emerald-400 animate-pulse" : "bg-stone-300"
-              }`}
-            />
-            <span>{isOpen ? "Accepting Orders" : "Closed for Orders"}</span>
+          <div className="min-w-0 flex-1">
+            <h1 className="break-words text-2xl font-semibold text-[#2B1B12]">{businessName}</h1>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-600"><MapPin aria-hidden="true" className="h-4 w-4 shrink-0 text-[#D2552B]" />{locationLine}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {isVerified && <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-800"><ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />Verified</span>}
+              {isOpen && <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-800"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />Accepting Orders</span>}
+            </div>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {!isEditing ? <button type="button" onClick={() => { setIsEditing(true); setFeedback(null); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#D2552B] px-4 text-sm font-semibold text-white transition hover:bg-[#C4461C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] focus-visible:ring-offset-2"><Edit3 aria-hidden="true" className="h-4 w-4" />Edit Kitchen</button> : <button type="button" onClick={() => { setIsEditing(false); setFeedback(null); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2B1B12]/20 bg-white px-4 text-sm font-semibold text-[#2B1B12] transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]"><X aria-hidden="true" className="h-4 w-4" />Cancel</button>}
           </div>
         </div>
+      </section>
 
-        {/* Profile Info Header Row */}
-        <div className="p-6 sm:p-8 pt-0 relative">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-12 sm:-mt-16 mb-6">
-            <div className="flex items-end gap-4">
-              {/* Kitchen Photo / Avatar with Cloudinary Upload Trigger */}
-              <div className="relative group">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#2B1B12] text-[#FFF8F0] border-4 border-white flex items-center justify-center text-3xl font-extrabold shadow-lg shrink-0 overflow-hidden">
-                  {kitchen?.profileImage ? (
-                    <img
-                      src={kitchen.profileImage}
-                      alt={businessName}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <ChefHat className="w-10 h-10 text-[#F4A52A]" />
-                  )}
-                </div>
-
-                {/* Upload Button Overlay */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingPhoto}
-                  className="absolute inset-0 bg-black/50 rounded-2xl flex flex-col items-center justify-center text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border-4 border-white"
-                  title="Upload kitchen profile photo"
-                >
-                  {uploadingPhoto ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Camera className="w-4 h-4 mb-0.5" />
-                      <span>Change</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="space-y-1">
-                <h3 className="text-xl sm:text-2xl font-extrabold text-[#2B1B12]">
-                  {businessName}
-                </h3>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[#2B1B12]/70">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-[#D2552B] shrink-0" />
-                    {locality}, {city}
-                  </span>
-                  <span>&bull;</span>
-                  <span className="text-[#3E5B3A] font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    {kitchen?.isApprovedToSell ? "Approved to Sell" : "Application Approved"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Photo upload status notice */}
-            {uploadingPhoto && (
-              <div className="flex items-center gap-2 text-xs text-[#D2552B] font-semibold animate-pulse">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Uploading to Cloudinary...</span>
-              </div>
-            )}
-          </div>
+      {/* Main profile details */}
+      <div>
 
           {/* VIEW MODE vs EDIT MODE */}
           {!isEditing ? (
-            /* =========================================================================
-               VIEW MODE
-               ========================================================================= */
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4 border-t border-[#2B1B12]/10">
-              {/* Left Column: Story, Mentorship & Specialties */}
-              <div className="lg:col-span-2 space-y-6">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#2B1B12]/60 mb-2">
-                    Kitchen Story & Heritage
-                  </h4>
-                  <p className="text-sm text-[#2B1B12]/85 leading-relaxed bg-[#FFF8F0] p-4 rounded-2xl border border-[#2B1B12]/5 font-normal">
-                    {bio}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 bg-orange-50/50 rounded-2xl border border-orange-100/70 space-y-1">
-                    <h5 className="text-[11px] font-bold uppercase tracking-wider text-[#2B1B12]/60 flex items-center gap-1.5">
-                      <Heart className="w-3.5 h-3.5 text-[#D2552B]" />
-                      <span>Culinary Mentor / Lineage</span>
-                    </h5>
-                    <p className="text-xs font-semibold text-[#2B1B12] mt-1">
-                      {whoTaughtCooking}
-                    </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="space-y-4 md:col-span-2">
+                <section className="rounded-xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm">
+                  <h2 className="text-sm font-semibold text-[#2B1B12]">About</h2>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[#2B1B12]/85">{bio || <MissingValue onAdd={() => setIsEditing(true)} />}</p>
+                </section>
+                <section className="rounded-xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm">
+                  <h2 className="text-sm font-semibold text-[#2B1B12]">Heritage</h2>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div><p className="text-xs text-gray-500">Culinary mentor / lineage</p><p className="mt-1 text-sm font-medium text-[#2B1B12]">{whoTaughtCooking || <MissingValue onAdd={() => setIsEditing(true)} />}</p></div>
+                    <div><p className="text-xs text-gray-500">Cooking experience</p><p className="mt-1 text-sm font-medium text-[#2B1B12]">{experienceYears || <MissingValue onAdd={() => setIsEditing(true)} />}</p></div>
                   </div>
-
-                  <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100/70 space-y-1">
-                    <h5 className="text-[11px] font-bold uppercase tracking-wider text-[#2B1B12]/60 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-[#F4A52A]" />
-                      <span>Cooking Experience</span>
-                    </h5>
-                    <p className="text-xs font-semibold text-[#2B1B12] mt-1">
-                      {experienceYears}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-white rounded-2xl border border-[#2B1B12]/10 space-y-1">
-                  <h5 className="text-[11px] font-bold uppercase tracking-wider text-[#2B1B12]/60 flex items-center gap-1.5">
-                    <UtensilsCrossed className="w-3.5 h-3.5 text-[#D2552B]" />
-                    <span>Signature Dish</span>
-                  </h5>
-                  <p className="text-xs font-semibold text-[#2B1B12] mt-1">
-                    {signatureDishes}
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#2B1B12]/60 mb-2">
-                    Regional Cuisines & Traditions
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {cuisines.map((c, i) => (
-                      <span
-                        key={`cuisine-${i}`}
-                        className="px-3 py-1.5 bg-[#D2552B]/10 text-[#D2552B] border border-[#D2552B]/20 rounded-xl text-xs font-bold"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                  <div className="mt-4 border-t border-gray-100 pt-4"><p className="text-xs text-gray-500">Signature dish</p><p className="mt-1 text-sm font-medium text-[#2B1B12]">{signatureDishes || <MissingValue onAdd={() => setIsEditing(true)} />}</p></div>
+                </section>
+                <section className="rounded-xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm">
+                  <h2 className="text-sm font-semibold text-[#2B1B12]">Cuisines</h2>
+                  {cuisines.length ? <div className="mt-3 flex flex-wrap gap-2">{cuisines.map((cuisine, index) => <span key={`cuisine-${index}`} className="inline-flex min-h-8 items-center rounded-full border border-[#2B1B12]/10 bg-[#FFF8F0] px-3 text-sm text-[#2B1B12]/85">{cuisine}</span>)}</div> : <p className="mt-3 text-sm"><MissingValue onAdd={() => setIsEditing(true)} /></p>}
+                </section>
               </div>
-
-              {/* Right Column: Location, Service Area & Read-Only Compliance */}
               <div className="space-y-4">
-                {/* Location & Service Area */}
-                <div className="p-5 bg-white rounded-2xl border border-[#2B1B12]/10 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#2B1B12]/70 flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-[#D2552B]" />
-                    <span>Location & Service Radius</span>
-                  </h4>
-                  <div className="space-y-2 text-xs text-[#2B1B12]/80">
-                    <div className="flex justify-between">
-                      <span className="text-[#2B1B12]/60">City:</span>
-                      <span className="font-semibold">{city}</span>
+                <section className="rounded-xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm">
+                  <h2 className="text-sm font-semibold text-[#2B1B12]">Location &amp; Service</h2>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div className="flex items-start justify-between gap-4"><dt className="text-xs text-gray-500">City</dt><dd className="text-right font-medium text-[#2B1B12]">{city || <MissingValue onAdd={() => setIsEditing(true)} />}</dd></div>
+                    <div className="flex items-start justify-between gap-4"><dt className="text-xs text-gray-500">Locality</dt><dd className="text-right font-medium text-[#2B1B12]">{locality || <MissingValue onAdd={() => setIsEditing(true)} />}</dd></div>
+                    <div className="flex items-start justify-between gap-4"><dt className="text-xs text-gray-500">Service radius</dt><dd className="text-right font-medium text-[#2B1B12]">{serviceArea || <MissingValue onAdd={() => setIsEditing(true)} />}</dd></div>
+                  </dl>
+                </section>
+                <section className="rounded-xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-[#2B1B12]"><Award aria-hidden="true" className="h-4 w-4 text-[#D2552B]" />Compliance (FSSAI)</h2>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div className="flex items-center justify-between gap-3"><dt className="text-xs text-gray-500">Status</dt><dd><span className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold ${fssaiStatus.status === "APPROVED" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{fssaiStatus.label}</span></dd></div>
+                    <div className="flex items-start justify-between gap-4"><dt className="text-xs text-gray-500">License number</dt><dd className="text-right font-medium text-[#2B1B12]">{maskedFssaiNumber}</dd></div>
+                    <div className="flex items-start justify-between gap-4"><dt className="text-xs text-gray-500">Expiry date</dt><dd className="text-right font-medium text-[#2B1B12]">{kitchen?.fssaiExpiryDate ? new Date(kitchen.fssaiExpiryDate).toLocaleDateString(undefined, { timeZone: "UTC" }) : "Not added yet"}</dd></div>
+                    <div className="flex items-start justify-between gap-4"><dt className="text-xs text-gray-500">Safety agreement</dt><dd className="text-right font-medium text-[#2B1B12]">{kitchen?.foodSafetyAgreementVersion || "Not added yet"}</dd></div>
+                  </dl>
+                  {kitchen?.fssaiRejectionReason && <p className="mt-3 text-sm text-red-700">Review note: {kitchen.fssaiRejectionReason}</p>}
+                  <details className="mt-5 border-t border-gray-100 pt-4">
+                    <summary className="min-h-11 cursor-pointer list-none rounded-lg text-sm font-semibold text-[#D2552B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]">Update FSSAI details</summary>
+                    <div className="pt-3">
+                      <form onSubmit={saveFssaiDetails} className="space-y-3">
+                        <label className="block text-xs font-medium text-gray-600">Registration type
+                          <select aria-label="FSSAI registration type" value={fssaiDetails.fssaiStatusType} onChange={(event) => setFssaiDetails((current) => ({ ...current, fssaiStatusType: event.target.value }))} className="mt-1 h-11 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm text-[#2B1B12] focus:outline-none focus:ring-2 focus:ring-[#D2552B]">
+                            <option value="NOT_YET_REGISTERED">Not registered yet</option><option value="APPLIED_ON_FOSCOS">Application in process</option><option value="HAVE_REGISTRATION">I have a registration</option>
+                          </select>
+                        </label>
+                        {fssaiDetails.fssaiStatusType === "HAVE_REGISTRATION" && <label className="block text-xs font-medium text-gray-600">14-digit FSSAI number<input aria-label="14-digit FSSAI number" value={fssaiDetails.fssaiNumber} onChange={(event) => setFssaiDetails((current) => ({ ...current, fssaiNumber: event.target.value.replace(/\D/g, "").slice(0, 14) }))} maxLength={14} inputMode="numeric" className="mt-1 h-11 w-full rounded-lg border border-orange-200 px-3 text-sm text-[#2B1B12] focus:outline-none focus:ring-2 focus:ring-[#D2552B]" /></label>}
+                        {fssaiDetails.fssaiStatusType === "APPLIED_ON_FOSCOS" && <label className="block text-xs font-medium text-gray-600">FoSCoS application reference<input aria-label="FoSCoS application reference" value={fssaiDetails.fssaiApplicationReference} onChange={(event) => setFssaiDetails((current) => ({ ...current, fssaiApplicationReference: event.target.value }))} maxLength={100} className="mt-1 h-11 w-full rounded-lg border border-orange-200 px-3 text-sm text-[#2B1B12] focus:outline-none focus:ring-2 focus:ring-[#D2552B]" /></label>}
+                        <button type="submit" disabled={savingFssaiDetails} className="min-h-11 rounded-lg border border-orange-300 px-4 text-sm font-semibold text-[#2B1B12] transition hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] disabled:opacity-60">{savingFssaiDetails ? "Saving…" : "Save"}</button>
+                      </form>
+                      <input ref={fssaiInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFssaiUpload} className="hidden" />
+                      <button type="button" disabled={uploadingFssai} onClick={() => fssaiInputRef.current?.click()} className="mt-3 min-h-11 w-full rounded-lg bg-[#D2552B] px-3 text-sm font-semibold text-white transition hover:bg-[#C4461C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] focus-visible:ring-offset-2 disabled:opacity-60">{uploadingFssai ? "Uploading…" : "Upload / replace FSSAI document"}</button>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#2B1B12]/60">Locality:</span>
-                      <span className="font-semibold">{locality}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#2B1B12]/60">Service Area:</span>
-                      <span className="font-semibold">{serviceArea}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Admin-managed verification with cook-managed FSSAI submission */}
-                <div className="p-5 bg-orange-50/50 rounded-2xl border border-orange-100/80 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#2B1B12]/70 flex items-center gap-1.5">
-                    <Award className="w-4 h-4 text-[#D2552B]" />
-                    <span>Compliance & Food Safety</span>
-                  </h4>
-                  <div className="space-y-2.5 text-xs text-[#2B1B12]/80">
-                    <div className="flex items-center justify-between">
-                      <span>Verification Status:</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        {kitchen?.verificationStatus || "APPROVED"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>FSSAI License:</span>
-                      <span className="font-bold text-[#3E5B3A] flex items-center gap-1">
-                        {kitchen?.fssaiNumber || "Number not provided"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between"><span>Registration type:</span><span className="font-semibold">{kitchen?.fssaiStatusType?.replaceAll("_", " ") || "Not specified"}</span></div>
-                    <div className="flex justify-between"><span>FSSAI status:</span><span className="font-semibold">{getCookFssaiStatusMessage(kitchen?.fssaiStatus, kitchen?.fssaiExpiryDate, kitchen?.fssaiRejectionReason).label}</span></div>
-                    <div className="flex justify-between"><span>Expiry date:</span><span className="font-semibold">{kitchen?.fssaiExpiryDate ? new Date(kitchen.fssaiExpiryDate).toLocaleDateString(undefined, { timeZone: "UTC" }) : "Not recorded"}</span></div>
-                    <div className="flex items-center justify-between">
-                      <span>Safety Agreement:</span>
-                      <span className="font-semibold text-gray-700">
-                        {kitchen?.foodSafetyAgreementVersion || "v1.0"} Signed
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Selling Status:</span>
-                      <span className="font-bold text-emerald-700">
-                        {kitchen?.isApprovedToSell ? "Authorized" : "Pending Verification"}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-[#2B1B12]/75">{getCookFssaiStatusMessage(kitchen?.fssaiStatus, kitchen?.fssaiExpiryDate, kitchen?.fssaiRejectionReason).nextAction}</p>
-                  {kitchen?.fssaiRejectionReason && <p className="text-[11px] text-red-700">Review note: {kitchen.fssaiRejectionReason}</p>}
-                  <form onSubmit={saveFssaiDetails} className="grid gap-2 sm:grid-cols-2 pt-2">
-                    <label className="text-[11px] font-semibold">Registration status
-                      <select value={fssaiDetails.fssaiStatusType} onChange={(event) => setFssaiDetails((current) => ({ ...current, fssaiStatusType: event.target.value }))} className="mt-1 w-full px-3 py-2 rounded-lg border border-orange-200 bg-white">
-                        <option value="NOT_YET_REGISTERED">Not registered yet</option>
-                        <option value="APPLIED_ON_FOSCOS">Application in process</option>
-                        <option value="HAVE_REGISTRATION">I have a registration</option>
-                      </select>
-                    </label>
-                    {fssaiDetails.fssaiStatusType === "HAVE_REGISTRATION" && <label className="text-[11px] font-semibold">14-digit FSSAI number
-                      <input value={fssaiDetails.fssaiNumber} onChange={(event) => setFssaiDetails((current) => ({ ...current, fssaiNumber: event.target.value }))} maxLength={14} inputMode="numeric" className="mt-1 w-full px-3 py-2 rounded-lg border border-orange-200" />
-                    </label>}
-                    {fssaiDetails.fssaiStatusType === "APPLIED_ON_FOSCOS" && <label className="text-[11px] font-semibold">FoSCoS application reference
-                      <input value={fssaiDetails.fssaiApplicationReference} onChange={(event) => setFssaiDetails((current) => ({ ...current, fssaiApplicationReference: event.target.value }))} maxLength={100} className="mt-1 w-full px-3 py-2 rounded-lg border border-orange-200" />
-                    </label>}
-                    <button type="submit" disabled={savingFssaiDetails} className="sm:col-span-2 justify-self-start px-3 py-2 rounded-lg border border-orange-300 text-xs font-bold disabled:opacity-60">{savingFssaiDetails ? "Saving…" : "Save FSSAI details"}</button>
-                  </form>
-                  <div className="pt-2 border-t border-orange-100 flex flex-wrap items-center gap-2">
-                    <input ref={fssaiInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFssaiUpload} className="hidden" />
-                    <button type="button" disabled={uploadingFssai} onClick={() => fssaiInputRef.current?.click()} className="px-3 py-2 rounded-lg bg-[#D2552B] text-white text-xs font-bold disabled:opacity-60">
-                      {uploadingFssai ? "Uploading..." : "Upload / replace FSSAI document"}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-[#2B1B12]/50 italic pt-1 border-t border-orange-100">
-                    Admin verification badges are managed exclusively by TasteBridge compliance curators.
-                  </p>
-                </div>
-
-                {/* Certified Chef Tag */}
-                <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-1.5 text-xs">
-                  <h5 className="font-bold text-[#3E5B3A] flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-[#3E5B3A]" />
-                    <span>Heritage Home Cook</span>
-                  </h5>
-                  <p className="text-[#3E5B3A]/85 text-[11px] leading-relaxed">
-                    Identity verified and approved to share regional ancestral dishes directly with customers.
-                  </p>
-                </div>
+                  </details>
+                </section>
               </div>
             </div>
           ) : (
@@ -670,12 +400,6 @@ export const CookKitchenPage = () => {
                EDIT MODE FORM
                ========================================================================= */
             <form onSubmit={handleSaveProfile} className="pt-4 border-t border-[#2B1B12]/10 space-y-6">
-              <div className="bg-[#FFF8F0] p-4 rounded-2xl border border-[#2B1B12]/5">
-                <p className="text-xs font-semibold text-[#2B1B12]/80">
-                  Update your kitchen details below. Changes are saved directly to your live marketplace presence.
-                </p>
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* Kitchen Display Name */}
                 <div className="space-y-1.5">
@@ -898,8 +622,7 @@ export const CookKitchenPage = () => {
             </form>
           )}
         </div>
-      </div>
-    </div>
+    </main>
   );
 };
 

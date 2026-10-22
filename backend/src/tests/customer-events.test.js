@@ -59,6 +59,114 @@ test("dedicated customer booking lists filter by authenticated customer and fixe
   assert.deepEqual(workshops.items.map((booking) => booking.eventType), ["WORKSHOP"]);
 });
 
+test("customer booking response exposes only the three public experience and kitchen image/name fields", async () => {
+  const privateCookValue = "private-cook-contact-marker";
+  let query;
+  const service = createCustomerEventsService({
+    experienceBooking: { findMany: async (input) => {
+      query = input;
+      return [{
+        ...records[1],
+        experience: {
+          ...records[1].experience,
+          image: "https://res.cloudinary.com/tastebridge/image/upload/v123/dine.jpg",
+          cook: {
+            businessName: "Warm Kitchen",
+            profileImage: "https://res.cloudinary.com/tastebridge/image/upload/v123/kitchen.jpg",
+            phone: privateCookValue,
+            email: privateCookValue,
+            privateAddress: privateCookValue,
+            fssaiNumber: privateCookValue,
+          },
+        },
+      }];
+    } },
+  });
+
+  const [booking] = (await service.listMyBookings("customer-a", "HOME_DINING")).items;
+  assert.deepEqual(query.select.experience.select, {
+    title: true,
+    location: true,
+    type: true,
+    theme: true,
+    cuisine: true,
+    image: true,
+    photos: true,
+    menuItems: {
+      orderBy: { sortOrder: "asc" },
+      select: { dish: { select: { name: true, image: true, cuisine: true } } },
+    },
+    cook: { select: { businessName: true, profileImage: true } },
+  });
+  assert.equal(booking.kitchenName, "Warm Kitchen");
+  assert.equal(booking.kitchenPhotoUrl, "https://res.cloudinary.com/tastebridge/image/upload/v123/kitchen.jpg");
+  assert.equal(booking.experienceImageUrl, "https://res.cloudinary.com/tastebridge/image/upload/v123/dine.jpg");
+  assert.equal(JSON.stringify(booking).includes(privateCookValue), false);
+  assert.deepEqual(Object.keys(booking).filter((key) => ["kitchenName", "kitchenPhotoUrl", "experienceImageUrl"].includes(key)), [
+    "kitchenName", "kitchenPhotoUrl", "experienceImageUrl",
+  ]);
+});
+
+test("Dine booking thumbnail matches Explore's curated image for the selected theme", async () => {
+  const service = createCustomerEventsService({
+    experienceBooking: { findMany: async () => [{
+      ...records[1],
+      experience: {
+        ...records[1].experience,
+        theme: "Gujarati",
+        image: "https://res.cloudinary.com/tastebridge/image/upload/v123/cook-photo.jpg",
+        photos: ["https://res.cloudinary.com/tastebridge/image/upload/v123/cook-photo.jpg"],
+        cook: { businessName: "Warm Kitchen", profileImage: "https://res.cloudinary.com/tastebridge/image/upload/v123/cook-photo.jpg" },
+      },
+    }] },
+    foodCategory: { findMany: async () => [{
+      name: "Gujarati",
+      slug: "gujarati",
+      image: "https://res.cloudinary.com/tastebridge/image/upload/v123/different-category-image.jpg",
+    }] },
+  });
+
+  const [booking] = (await service.listMyBookings("customer-a", "HOME_DINING")).items;
+  assert.equal(booking.experienceImageUrl, "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/52/Ahmedabad-gujarati_thali.jpg/960px-Ahmedabad-gujarati_thali.jpg");
+  assert.equal(booking.theme, undefined);
+  assert.deepEqual(Object.keys(booking).filter((key) => ["kitchenName", "kitchenPhotoUrl", "experienceImageUrl"].includes(key)), [
+    "kitchenName", "kitchenPhotoUrl", "experienceImageUrl",
+  ]);
+});
+
+test("Dine booking image matches Explore's first matching menu-dish image", async () => {
+  const dishImage = "https://res.cloudinary.com/tastebridge/image/upload/v123/gujarati-dish.jpg";
+  const service = createCustomerEventsService({
+    experienceBooking: { findMany: async () => [{
+      ...records[1],
+      experience: {
+        ...records[1].experience,
+        theme: "Gujarati",
+        cuisine: "Gujarati",
+        image: "https://res.cloudinary.com/tastebridge/image/upload/v123/cook-photo.jpg",
+        menuItems: [{ dish: { name: "Dhokla", cuisine: "Gujarati", image: dishImage } }],
+        cook: { businessName: "Warm Kitchen", profileImage: null },
+      },
+    }] },
+  });
+
+  const [booking] = (await service.listMyBookings("customer-a", "HOME_DINING")).items;
+  assert.equal(booking.experienceImageUrl, dishImage);
+});
+
+test("customer booking response suppresses malformed or non-public image URLs", async () => {
+  const service = createCustomerEventsService({
+    experienceBooking: { findMany: async () => [{
+      ...records[1],
+      experience: { ...records[1].experience, image: "http://localhost/private.jpg", cook: { businessName: "Test Kitchen", profileImage: "file:///private.jpg" } },
+    }] },
+  });
+  const [booking] = (await service.listMyBookings("customer-a", "HOME_DINING")).items;
+  assert.equal(booking.kitchenName, "Test Kitchen");
+  assert.equal(booking.kitchenPhotoUrl, null);
+  assert.equal(booking.experienceImageUrl, null);
+});
+
 test("My Events returns an empty list for a customer without bookings", async () => {
   const service = createCustomerEventsService({ experienceBooking: { findMany: async ({ where }) => {
     assert.deepEqual(where, { customerId: "customer-empty" });

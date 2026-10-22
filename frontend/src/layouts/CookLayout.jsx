@@ -26,15 +26,23 @@ import {
   Clock,
   Loader2,
   AlertTriangle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import ErrorBoundary from "../components/common/ErrorBoundary.jsx";
-import {
-  COOK_ORDER_STATUS_OPTIONS,
-  calculateOrderCounts,
-} from "../pages/cook/panel/cookOrderConstants.js";
+import { calculateOrderCounts } from "../pages/cook/panel/cookOrderConstants.js";
+
+function Sidebar({ children, className, ...props }) {
+  return <aside className={className} {...props}>{children}</aside>;
+}
+
+function TopBar({ children }) {
+  return <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-[#2B1B12]/10 bg-[#FFF8F0]/95 px-4 py-3 backdrop-blur-md sm:px-6">{children}</header>;
+}
 
 export const CookLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [statusFeedback, setStatusFeedback] = useState(null);
@@ -381,14 +389,11 @@ export const CookLayout = () => {
   };
 
   const isOrdersRoute = location.pathname === "/cook/orders" || location.pathname.startsWith("/cook/orders/");
-  const searchParams = new URLSearchParams(location.search);
-  const currentStatusFilter = searchParams.get("status") || "pending";
 
   // Derive active page header label
   let activeTitle = "Cook Panel";
   if (isOrdersRoute) {
-    const activeSubGroup = COOK_ORDER_STATUS_OPTIONS.find((g) => g.id === currentStatusFilter);
-    activeTitle = activeSubGroup ? `Food orders · ${activeSubGroup.label}` : "Food orders";
+    activeTitle = "Food orders";
   } else {
     for (const group of navigationGroups) {
       for (const item of group.items) {
@@ -400,7 +405,7 @@ export const CookLayout = () => {
     }
   }
 
-  const renderNavItem = (item, isMobile = false) => {
+  const renderNavItem = (item, isMobile = false, isCollapsed = false) => {
     const Icon = item.icon;
     const active = isItemActive(item);
     const isFoodOrders = item.path === "/cook/orders";
@@ -412,16 +417,45 @@ export const CookLayout = () => {
         onClick={() => {
           if (isMobile) setMobileMenuOpen(false);
         }}
-        className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-150 ${
+        title={isCollapsed ? item.label : undefined}
+        aria-label={isCollapsed ? item.label : undefined}
+        className={`relative flex min-h-11 w-full items-center ${isCollapsed ? "justify-center px-2" : "gap-3 px-3"} rounded-xl py-2 text-[15px] font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A] ${
           active
             ? "bg-[#D2552B] text-white shadow-md shadow-[#D2552B]/20"
             : "text-[#FFF8F0]/75 hover:bg-[#FFF8F0]/10 hover:text-white"
         }`}
       >
-        <Icon className="w-4 h-4 shrink-0" />
-        <span>{item.label}</span>
+        <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+        {!isCollapsed && <span>{item.label}</span>}
         {isFoodOrders && orderCounts.pending > 0 && (
-          <span className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-stone-900 shadow-xs">
+          <span className={`${isCollapsed ? "absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center px-1" : "ml-auto px-1.5 py-0.5"} rounded-full text-[10px] font-extrabold bg-amber-400 text-stone-900 shadow-xs`}>
+            {orderCounts.pending}
+          </span>
+        )}
+      </NavLink>
+    );
+  };
+
+  const renderTabletNavItem = (item) => {
+    const Icon = item.icon;
+    const active = isItemActive(item);
+    const isFoodOrders = item.path === "/cook/orders";
+
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        title={item.label}
+        aria-label={item.label}
+        className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A] ${
+          active
+            ? "bg-[#D2552B] text-white shadow-md shadow-[#D2552B]/20"
+            : "text-[#FFF8F0]/75 hover:bg-[#FFF8F0]/10 hover:text-white"
+        }`}
+      >
+        <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+        {isFoodOrders && orderCounts.pending > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold text-stone-900 shadow-xs">
             {orderCounts.pending}
           </span>
         )}
@@ -434,60 +468,93 @@ export const CookLayout = () => {
       {/* =========================================================================
           DESKTOP PERSISTENT SIDEBAR
          ========================================================================= */}
-      <aside className="hidden lg:flex flex-col w-64 bg-[#2B1B12] text-[#FFF8F0] border-r border-[#2B1B12]/20 shrink-0 sticky top-0 h-screen overflow-y-auto">
+      <Sidebar aria-label="Cook sidebar" className={`sticky top-0 hidden h-screen ${sidebarCollapsed ? "w-[76px]" : "w-[260px]"} shrink-0 flex-col overflow-y-auto border-r border-[#2B1B12]/20 bg-[#2B1B12] text-[#FFF8F0] transition-[width] duration-200 lg:flex`}>
         {/* Brand Header */}
-        <div className="p-5 border-b border-[#FFF8F0]/10 flex items-center justify-between">
-          <Link to="/cook" className="flex items-center gap-2.5 group">
+        <div className={`border-b border-[#FFF8F0]/10 flex items-center ${sidebarCollapsed ? "flex-col gap-2 p-3" : "justify-between p-5"}`}>
+          <Link to="/cook" aria-label="TasteBridge Cook Home" className={`flex items-center gap-2.5 group ${sidebarCollapsed ? "justify-center" : ""}`}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-red-500/20 group-hover:scale-105 transition-transform shrink-0">
               <UtensilsCrossed className="w-5 h-5" />
             </div>
-            <div>
+            {!sidebarCollapsed && <div>
               <span className="text-xl font-bold bg-gradient-to-r from-red-500 via-amber-400 to-amber-300 bg-clip-text text-transparent block leading-tight">
                 TasteBridge
               </span>
               <span className="text-[9px] uppercase tracking-wider font-semibold text-amber-400 block -mt-0.5">
                 Where Food Meets Heritage
               </span>
-            </div>
+            </div>}
           </Link>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#FFF8F0]/70 transition-colors duration-150 hover:bg-[#FFF8F0]/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A]"
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+          </button>
         </div>
 
         {/* Grouped Navigation Links */}
-        <nav className="flex-1 px-3 py-4 space-y-4">
+        <nav aria-label="Cook navigation" className="flex-1 space-y-6 px-3 py-4">
           {navigationGroups.map((group, groupIndex) => (
-            <div key={`group-${groupIndex}`} className="space-y-1">
-              <span className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-[#FFF8F0]/40 block mb-1">
+            <div key={`group-${groupIndex}`} className={`space-y-1.5 ${sidebarCollapsed ? "flex flex-col items-center" : ""}`}>
+              {!sidebarCollapsed && <span className="mb-2 block px-3 text-xs font-extrabold uppercase tracking-wider text-[#FFF8F0]/40">
                 {group.groupTitle}
-              </span>
-              {group.items.map((item) => renderNavItem(item, false))}
+              </span>}
+              {group.items.map((item) => renderNavItem(item, false, sidebarCollapsed))}
             </div>
           ))}
         </nav>
 
         {/* Sidebar Footer Actions */}
-        <div className="p-3 border-t border-[#FFF8F0]/10 space-y-1.5">
+        <div className="space-y-1.5 border-t border-[#FFF8F0]/10 p-3">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors cursor-pointer text-left"
+            title={sidebarCollapsed ? "Sign Out" : undefined}
+            aria-label={sidebarCollapsed ? "Sign Out" : undefined}
+            className={`flex min-h-11 w-full items-center ${sidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} rounded-xl py-2 text-[15px] font-semibold text-red-400 transition-colors duration-150 hover:bg-red-950/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A] cursor-pointer text-left`}
           >
-            <LogOut className="w-4 h-4 shrink-0" />
-            <span>Sign Out</span>
+            <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
+            {!sidebarCollapsed && <span>Sign Out</span>}
           </button>
         </div>
-      </aside>
+      </Sidebar>
+
+      {/* Tablet icon rail; the hamburger opens the full navigation drawer. */}
+      <Sidebar aria-label="Cook sidebar" className="sticky top-0 hidden h-screen w-[72px] shrink-0 flex-col items-center overflow-y-auto border-r border-[#2B1B12]/20 bg-[#2B1B12] text-[#FFF8F0] md:flex lg:hidden">
+        <Link to="/cook" aria-label="TasteBridge Cook Home" className="flex h-[73px] w-full items-center justify-center border-b border-[#FFF8F0]/10">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-red-600 to-amber-500 text-white shadow-md shadow-red-500/20">
+            <UtensilsCrossed className="h-5 w-5" aria-hidden="true" />
+          </span>
+        </Link>
+        <nav aria-label="Cook navigation" className="flex flex-1 flex-col items-center gap-3 px-2 py-4">
+          {navigationGroups.map((group, groupIndex) => (
+            <div key={`tablet-group-${groupIndex}`} className="flex flex-col items-center gap-2 border-b border-[#FFF8F0]/10 pb-3 last:border-0">
+              {group.items.map(renderTabletNavItem)}
+            </div>
+          ))}
+        </nav>
+        <div className="w-full border-t border-[#FFF8F0]/10 p-3">
+          <button type="button" onClick={handleLogout} title="Sign Out" aria-label="Sign Out" className="flex h-11 w-11 items-center justify-center rounded-xl text-red-400 transition-colors hover:bg-red-950/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A52A]">
+            <LogOut className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+      </Sidebar>
 
       {/* =========================================================================
           MAIN CONTENT AREA & TOP HEADER
          ========================================================================= */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         {/* Top Sticky Header */}
-        <header className="sticky top-0 z-30 bg-[#FFF8F0]/95 backdrop-blur-md border-b border-[#2B1B12]/10 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+        <TopBar>
           {/* Left: Hamburger & Active Page Title */}
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile Sidebar Hamburger Toggle */}
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl text-[#2B1B12] hover:bg-white border border-[#2B1B12]/10 cursor-pointer shrink-0"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[#2B1B12]/10 p-2 text-[#2B1B12] transition duration-150 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] md:hidden cursor-pointer shrink-0"
               aria-label="Toggle navigation menu"
             >
               <Menu className="w-5 h-5" />
@@ -503,7 +570,7 @@ export const CookLayout = () => {
                   &bull; {kitchenName}
                 </span>
               </div>
-              <p className="text-[10px] text-[#2B1B12]/50 hidden md:block">
+              <p className="text-xs text-[#2B1B12]/50 hidden md:block">
                 TasteBridge Cook Panel
               </p>
             </div>
@@ -514,7 +581,7 @@ export const CookLayout = () => {
             {/* Read-Only Verification Badge */}
             {isApproved ? (
               <div
-                className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold select-none cursor-default shrink-0"
+                className="hidden min-h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 select-none cursor-default shrink-0 md:inline-flex"
                 title="Your kitchen is verified and approved on TasteBridge"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
@@ -522,7 +589,7 @@ export const CookLayout = () => {
               </div>
             ) : verificationStatus === "PENDING" ? (
               <div
-                className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold select-none cursor-default shrink-0"
+                className="hidden min-h-9 items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 select-none cursor-default shrink-0 md:inline-flex"
                 title="Cook verification is in review"
               >
                 <Clock className="w-3.5 h-3.5 text-amber-600" />
@@ -537,7 +604,7 @@ export const CookLayout = () => {
               disabled={statusUpdating}
               role="switch"
               aria-checked={isKitchenOpen}
-              className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer ${
+              className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] cursor-pointer ${
                 isKitchenOpen
                   ? "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
                   : "bg-stone-100 border-stone-300 text-stone-700 hover:bg-stone-200"
@@ -557,10 +624,10 @@ export const CookLayout = () => {
                   }`}
                 />
               )}
-              <span className="hidden sm:inline">
+              <span className="hidden lg:inline">
                 {isKitchenOpen ? "Kitchen Open" : "Kitchen Closed"}
               </span>
-              <span className="sm:hidden">
+              <span className="lg:hidden">
                 {isKitchenOpen ? "Open" : "Closed"}
               </span>
               {/* Toggle switch track indicator */}
@@ -582,39 +649,39 @@ export const CookLayout = () => {
                   setNotificationsOpen(opening);
                   if (opening && canFetchCookNotifications) loadCookNotifications();
                 }}
-                className="p-2 rounded-xl text-[#2B1B12]/80 hover:bg-white hover:text-[#2B1B12] border border-[#2B1B12]/10 transition-colors cursor-pointer"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#2B1B12]/10 text-[#2B1B12]/80 transition-colors duration-150 hover:bg-white hover:text-[#2B1B12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] cursor-pointer"
                 aria-label="View notifications"
                 title="Notifications"
                 aria-expanded={notificationsOpen}
               >
-                <Bell className="w-4 h-4" />
-                {notificationUnreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center">{notificationUnreadCount}</span>}
+                <Bell className="h-5 w-5" aria-hidden="true" />
+                {notificationUnreadCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold text-white">{notificationUnreadCount}</span>}
               </button>
 
               {notificationsOpen && (
                 <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl border border-[#2B1B12]/10 p-4 z-50 text-left animate-in fade-in duration-150">
                   <div className="flex items-center justify-between pb-2 border-b border-[#2B1B12]/10">
                     <span className="text-xs font-extrabold text-[#2B1B12]">Notifications</span>
-                    <span className="text-[10px] text-[#2B1B12]/50 font-medium">{notificationUnreadCount ? `${notificationUnreadCount} unread` : "Up to date"}</span>
+                    <span className="text-xs text-[#2B1B12]/50 font-medium">{notificationUnreadCount ? `${notificationUnreadCount} unread` : "Up to date"}</span>
                   </div>
                   {notificationUnreadCount > 0 && (
                     <button
                       type="button"
                       onClick={handleMarkAllNotificationsRead}
                       disabled={markingAllNotifications}
-                      className="mt-2 text-[11px] font-bold text-[#D2552B] hover:underline disabled:opacity-60"
+                      className="mt-2 min-h-11 text-xs font-bold text-[#D2552B] hover:underline disabled:opacity-60"
                     >
                       {markingAllNotifications ? "Marking all as read…" : "Mark all as read"}
                     </button>
                   )}
                   {notificationsError && (
-                    <div role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                    <div role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                       <p>{notificationsError}</p>
                       <button type="button" onClick={loadCookNotifications} className="mt-1 font-bold underline">Retry</button>
                     </div>
                   )}
                   {notificationActionError && (
-                    <div role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                    <div role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                       {notificationActionError}
                     </div>
                   )}
@@ -635,15 +702,15 @@ export const CookLayout = () => {
                         >
                           <span className="flex items-start justify-between gap-2">
                             <span className="block text-xs font-bold text-[#2B1B12]">{notification.title}</span>
-                            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${notification.isRead ? "bg-stone-100 text-stone-500" : "bg-orange-100 text-orange-800"}`}>
+                            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold ${notification.isRead ? "bg-stone-100 text-stone-500" : "bg-orange-100 text-orange-800"}`}>
                               {notification.isRead ? "Read" : "Unread"}
                             </span>
                           </span>
-                          <span className="mt-1 block text-[11px] leading-relaxed text-[#2B1B12]/70">{notification.message}</span>
-                          <span className="mt-1 block text-[10px] text-[#2B1B12]/45">
+                          <span className="mt-1 block text-xs leading-relaxed text-[#2B1B12]/70">{notification.message}</span>
+                          <span className="mt-1 block text-xs text-[#2B1B12]/45">
                             {Number.isNaN(new Date(notification.createdAt).getTime()) ? "" : new Date(notification.createdAt).toLocaleString()}
                           </span>
-                          {notification.sources?.some((item) => item.id === notificationActionId) && <span className="mt-1 block text-[10px] text-[#2B1B12]/50">Updating…</span>}
+                          {notification.sources?.some((item) => item.id === notificationActionId) && <span className="mt-1 block text-xs text-[#2B1B12]/50">Updating…</span>}
                         </button>
                       ))}
                     </div>
@@ -662,16 +729,16 @@ export const CookLayout = () => {
             <PortalSwitchButton
               portal="CUSTOMER"
               to="/"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#2B1B12]/15 text-xs font-bold text-[#D2552B] hover:border-[#D2552B] hover:bg-orange-50/50 transition-all shadow-2xs"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-[#2B1B12]/15 bg-white px-3 py-1.5 text-xs font-bold text-[#D2552B] shadow-2xs transition-all duration-150 hover:border-[#D2552B] hover:bg-orange-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]"
               title="Navigate to customer marketplace"
             >
               <Compass className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Switch to Marketplace</span>
-              <span className="sm:hidden">Marketplace</span>
+              <span className="hidden xl:inline">Switch to Marketplace</span>
+              <span className="xl:hidden">Marketplace</span>
             </PortalSwitchButton>
 
           </div>
-        </header>
+        </TopBar>
 
         {/* =========================================================================
             PERSISTENT CLOSED KITCHEN WARNING BANNER
@@ -759,7 +826,7 @@ export const CookLayout = () => {
               <nav className="flex-1 py-4 space-y-4 overflow-y-auto">
                 {navigationGroups.map((group, groupIndex) => (
                   <div key={`m-group-${groupIndex}`} className="space-y-1">
-                    <span className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-[#FFF8F0]/40 block mb-1">
+                    <span className="mb-2 block px-3 text-xs font-extrabold uppercase tracking-wider text-[#FFF8F0]/40">
                       {group.groupTitle}
                     </span>
                     {group.items.map((item) => renderNavItem(item, true))}
@@ -792,7 +859,7 @@ export const CookLayout = () => {
         )}
 
         {/* Page Content Outlet */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className={`flex-1 w-full p-4 sm:p-6 lg:p-8 ${location.pathname === "/cook" || location.pathname === "/cook/" || location.pathname === "/cook/dashboard" ? "max-w-none" : "mx-auto max-w-7xl"}`}>
           <ErrorBoundary>
             <Outlet
               context={{

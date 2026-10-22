@@ -93,21 +93,24 @@ test("Cook panel removes the unavailable Help item and redirects its old route",
   assert.doesNotMatch(routes, /title="Help"|icon=\{HelpCircle\}/);
 });
 
-test("CookOrdersPage filters by status query parameter and presents details without mixing", async () => {
+test("CookOrdersPage filters by status query parameter and opens matching order details in a drawer", async () => {
   const page = await readSource("../src/pages/cook/panel/CookOrdersPage.jsx");
 
   // Reads status parameter and filters
   assert.match(page, /searchParams\.get\("status"\)/);
   assert.match(page, /activeGroup\.statuses\.includes\(order\.status\)/);
 
-  // Derives active selection
-  assert.match(page, /const activeSelectedId =/);
-  assert.match(page, /selectedOrder = orders\.find\(\(o\) => o\.id === activeSelectedId\)/);
+  // Cards are filtered by the active status and selected details are kept separate in the drawer.
+  assert.match(page, /const drawerOrder = orders\.find\(\(item\) => item\.id === drawerOrderId\)/);
+  assert.match(page, /setDrawerOrderId\(orderId\)/);
+  assert.match(page, /<OrderDetailsDrawer/);
 
-  // Order Details card elements
+  // Order details preserve the existing fulfillment and billing data.
   assert.match(page, /order\.totalAmount/);
-  assert.match(page, /selectedAddress\?\.recipientName/);
-  assert.match(page, /selectedAddress\?\.phone/);
+  assert.match(page, /orderAddress\?\.recipientName/);
+  assert.match(page, /orderAddress\?\.phone/);
   assert.match(page, /Dishes & Quantities/);
   assert.match(page, /Billing Breakdown/);
+  assert.doesNotMatch(page, /Click to view details/);
+  assert.doesNotMatch(page, /No order selected/);
 });

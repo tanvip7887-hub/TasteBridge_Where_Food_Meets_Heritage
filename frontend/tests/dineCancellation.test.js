@@ -130,9 +130,10 @@ test("cancellation request awaiting Cook review is not cancellable again and dis
 });
 
 test("My Events requires cancellation reason, calls the owner-scoped cancellation request endpoint, and handles review state", async () => {
-  const [api, page, historyService, cancellationService] = await Promise.all([
+  const [api, page, bookingCard, historyService, cancellationService] = await Promise.all([
     read("../src/api/eventsApi.js"),
     read("../src/pages/MyEventsPage.jsx"),
+    read("../src/components/bookings/BookingCard.jsx"),
     read("../../backend/src/modules/events/customer-events.service.js"),
     read("../../backend/src/modules/events/dine-cancellations.service.js"),
   ]);
@@ -149,16 +150,17 @@ test("My Events requires cancellation reason, calls the owner-scoped cancellatio
   assert.match(page, /The Cook has been notified to review your request/);
   assert.match(page, /requestError\?\.response\?\.data\?\.message/);
   assert.match(page, /state\.reason \|\|/);
-  assert.match(page, /availableSeats === 1 \? "seat" : "seats"/);
+  const workshopCard = bookingCard.slice(bookingCard.indexOf("if (isWorkshop)"), bookingCard.indexOf("\n  const reference", bookingCard.indexOf("if (isWorkshop)")));
+  assert.doesNotMatch(workshopCard, /availableSeats/);
   assert.match(historyService, /cancellation: cancellationSummary/);
   assert.match(historyService, /cancellationRequestedAt/);
   assert.match(historyService, /experienceCancellationWindowHours/);
   assert.match(historyService, /cancellation window has closed[\s\S]*\$\{cancellationWindowHours\} hours/);
   assert.match(historyService, /realMoneyReturned: false/);
   assert.match(historyService, /availableSeats: booking\.slot\?\.availableSeats/);
-  assert.match(page, /Simulated refund \{statusLabel\(booking\.refund\.status\)\}/);
-  assert.match(page, /No real money was returned/);
-  assert.match(page, /The booking expired before the Cook reviewed the cancellation request/);
+  assert.match(bookingCard, /Simulated refund \{statusLabel\(booking\.refund\.status\)\}/);
+  assert.match(bookingCard, /No real money was returned/);
+  assert.match(bookingCard, /The booking expired before the Cook reviewed the cancellation request/);
   assert.match(page, /booking remains \{statusLabel\(booking\.status\)\.toLowerCase\(\)\}/);
   assert.match(cancellationService, /WHERE "id" = \$\{bookingId\} AND "customerId" = \$\{customerId\}/);
   assert.match(cancellationService, /requestCancellation/);

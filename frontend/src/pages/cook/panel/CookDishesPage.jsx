@@ -199,33 +199,6 @@ export const CookDishesPage = () => {
 
   return (
     <div className="space-y-6 text-left animate-in fade-in duration-200 pb-12">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-[#2B1B12] tracking-tight">
-            My dishes
-          </h2>
-          <p className="text-xs sm:text-sm text-[#2B1B12]/70 mt-1">
-            Manage your regional recipes, available portions, and cultural origin stories.
-          </p>
-        </div>
-
-        {/* Primary CTA */}
-        <button
-          id="cook-add-dish-btn"
-          data-testid="cook-add-dish-btn"
-          type="button"
-          onClick={() => {
-            setDishToEdit(null);
-            setModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#D2552B] hover:bg-[#C4461C] text-white rounded-xl text-xs font-bold shadow-md shadow-[#D2552B]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Dish</span>
-        </button>
-      </div>
-
       {/* Feedback Toast */}
       {feedback && (
         <div
@@ -254,28 +227,45 @@ export const CookDishesPage = () => {
 
       {/* Filter & Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-[#2B1B12]/10 space-y-3 shadow-xs">
-        {/* Status Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-[#2B1B12]/5">
-          {[
-            { id: "ALL", label: `All Dishes (${counts.ALL})` },
-            { id: "PUBLISHED", label: `Published (${counts.PUBLISHED})` },
-            { id: "PENDING_APPROVAL", label: `Pending approval (${counts.PENDING_APPROVAL})` },
-            { id: "DRAFT", label: `Drafts (${counts.DRAFT})` },
-            { id: "UNPUBLISHED", label: `Unpublished (${counts.UNPUBLISHED})` },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSelectedStatus(tab.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                selectedStatus === tab.id
-                  ? "bg-[#D2552B] text-white shadow-2xs"
-                  : "bg-stone-50 text-[#2B1B12]/70 hover:bg-stone-100 hover:text-[#2B1B12]"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          {/* Status Tabs */}
+          <div className="order-2 flex min-w-0 items-center gap-2 overflow-x-auto border-b border-[#2B1B12]/5 pb-1 scrollbar-none md:order-1 md:flex-1">
+            {[
+              { id: "ALL", label: `All Dishes (${counts.ALL})` },
+              { id: "PUBLISHED", label: `Published (${counts.PUBLISHED})` },
+              { id: "PENDING_APPROVAL", label: `Pending approval (${counts.PENDING_APPROVAL})` },
+              { id: "DRAFT", label: `Drafts (${counts.DRAFT})` },
+              { id: "UNPUBLISHED", label: `Unpublished (${counts.UNPUBLISHED})` },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedStatus(tab.id)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === tab.id
+                    ? "bg-[#D2552B] text-white shadow-2xs"
+                    : "bg-stone-50 text-[#2B1B12]/70 hover:bg-stone-100 hover:text-[#2B1B12]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Primary CTA */}
+          <button
+            id="cook-add-dish-btn"
+            data-testid="cook-add-dish-btn"
+            type="button"
+            onClick={() => {
+              setDishToEdit(null);
+              setModalOpen(true);
+            }}
+            className="order-1 ml-auto inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#D2552B] px-5 text-xs font-bold text-white transition-all hover:scale-[1.02] hover:bg-[#C4461C] active:scale-[0.98] cursor-pointer md:order-2 md:w-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Dish</span>
+          </button>
         </div>
 
         {/* Search & Category Dropdown */}

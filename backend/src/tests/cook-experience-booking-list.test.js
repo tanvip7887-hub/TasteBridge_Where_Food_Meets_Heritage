@@ -25,6 +25,15 @@ test("Cook booking list always scopes by session Cook and pins each requested ex
   ]);
   assert.equal(database.queries[0].include.paymentAttempts.take, 1);
   assert.equal(database.queries[0].include.experience.select.type, true);
+  assert.equal(database.queries[0].include.experience.select.image, true);
+  assert.equal(database.queries[0].include.experience.select.photos, true);
+  assert.equal(database.queries[0].include.experience.select.theme, true);
+  assert.equal(database.queries[0].include.experience.select.cuisine, true);
+  assert.deepEqual(database.queries[0].include.experience.select.menuItems.select.dish.select, {
+    name: true,
+    image: true,
+    cuisine: true,
+  });
 });
 
 test("invalid Cook booking type is rejected before querying", async () => {

@@ -6,18 +6,15 @@ import {
   Clock,
   Sparkles,
   Wallet,
-  ChefHat,
   ArrowRight,
-  Plus,
-  ShieldCheck,
-  CalendarCheck,
   AlertCircle,
-  RefreshCw,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import cookApi from "../../../api/cookApi.js";
 import { isApprovedCook } from "../../../utils/cookAuth.js";
 import { normalizeCookReadiness } from "../../../utils/cookReadiness.js";
+import { ExperiencesCard, HeroBanner, OrdersCard, StatCard } from "../../../components/cook/dashboard/CookDashboardWidgets.jsx";
 
 export const CookDashboardPage = () => {
   const { user } = useSelector((state) => state.auth);
@@ -89,24 +86,27 @@ export const CookDashboardPage = () => {
 
   if (loading) {
     return (
-      <div className="space-y-8 text-left animate-pulse">
+      <div className="mx-auto w-full max-w-[1400px] space-y-8 text-left animate-pulse">
         {/* Banner Skeleton */}
         <div className="h-44 bg-gradient-to-r from-orange-200/50 to-amber-200/50 rounded-3xl" />
 
         {/* 4 Cards Skeleton */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={`skel-${i}`} className="h-28 bg-white rounded-2xl border border-orange-100/60 p-4 space-y-3">
-              <div className="h-4 bg-orange-100/60 rounded-md w-24" />
-              <div className="h-8 bg-orange-100/40 rounded-lg w-16" />
+            <div key={`skel-${i}`} className="h-36 space-y-4 rounded-2xl border border-orange-100/60 bg-white p-5">
+              <div className="h-4 w-28 rounded-md bg-orange-100/60" />
+              <div className="h-9 w-20 rounded-lg bg-orange-100/40" />
+              <div className="h-3 w-36 rounded bg-orange-100/40" />
             </div>
           ))}
         </div>
 
         {/* Feeds Skeleton */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="h-64 bg-white rounded-3xl border border-orange-100/60 p-6" />
-          <div className="h-64 bg-white rounded-3xl border border-orange-100/60 p-6" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {[1, 2].map((panel) => <div key={`panel-${panel}`} className={`min-h-96 rounded-2xl border border-orange-100/60 bg-white p-6 ${panel === 1 ? "lg:col-span-7" : "lg:col-span-5"}`}>
+            <div className="mb-5 h-10 w-48 rounded bg-orange-100/50" />
+            {[1, 2, 3].map((row) => <div key={`row-${row}`} className="flex h-[72px] items-center justify-between border-b border-orange-100/50"><div className="space-y-2"><div className="h-4 w-48 rounded bg-orange-100/50" /><div className="h-3 w-32 rounded bg-orange-100/40" /></div><div className="h-8 w-20 rounded-full bg-orange-100/40" /></div>)}
+          </div>)}
         </div>
       </div>
     );
@@ -183,331 +183,57 @@ export const CookDashboardPage = () => {
         return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
-
   return (
-    <div className="space-y-6 text-left animate-in fade-in duration-200 pb-12">
-      {/* Top Page Heading */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-extrabold text-[#2B1B12] tracking-tight">
-          Home
-        </h1>
-        <p className="text-xs sm:text-sm text-[#2B1B12]/70 mt-1">
-          Welcome to your kitchen headquarters. Monitor incoming orders, dining events, and profile status.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[1400px] space-y-8 pb-12 text-left animate-in fade-in duration-200">
+      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+        <div className="flex items-center gap-2"><AlertCircle className="h-5 w-5 shrink-0" /><span>{error}</span></div>
+        <button type="button" onClick={refreshDashboardData} className="min-h-11 rounded-xl bg-red-600 px-4 py-2 font-bold text-white transition duration-150 hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2">Retry</button>
+      </div>}
 
-      {/* Top Error Alert if API error */}
-      {error && (
-        <div className="p-4 rounded-2xl bg-red-50 text-red-700 border border-red-200 flex items-center justify-between text-xs font-semibold">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+      {dashboardData && !readiness && <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Selling readiness could not be loaded. Refresh the dashboard to try again.</div>}
+
+      {readiness?.showChecklist && <section aria-labelledby="selling-readiness-heading" className="space-y-4 rounded-2xl border border-[#2B1B12]/10 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-start gap-3">
+          <AlertCircle aria-hidden="true" className="mt-0.5 h-6 w-6 shrink-0 text-amber-700" />
+          <div>
+            <h2 id="selling-readiness-heading" className="text-lg font-extrabold text-[#2B1B12]">{readiness.heading}</h2>
+            <p className="mt-1 text-sm text-[#2B1B12]/65">Complete the items below before your kitchen can sell on TasteBridge.</p>
+            {readiness.readyToSell && kitchen?.isOpen === false && <p className="mt-2 text-sm text-amber-800">Your kitchen is currently closed, so customers cannot see your dishes until you open it.</p>}
           </div>
-          <button
-            onClick={refreshDashboardData}
-            className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer"
-          >
-            Retry
-          </button>
         </div>
-      )}
-
-      {dashboardData && !readiness && (
-        <div role="alert" className="p-4 rounded-2xl bg-amber-50 text-amber-900 border border-amber-200 text-sm">
-          Selling readiness could not be loaded. Refresh the dashboard to try again.
-        </div>
-      )}
-
-      {readiness && (
-        <section aria-labelledby="selling-readiness-heading" className="p-5 sm:p-6 bg-white rounded-3xl border border-[#2B1B12]/10 space-y-4">
-          <div className="flex items-start gap-3">
-            {readiness.readyToSell
-              ? <CheckCircle2 aria-hidden="true" className="w-6 h-6 mt-0.5 shrink-0 text-emerald-700" />
-              : <AlertCircle aria-hidden="true" className="w-6 h-6 mt-0.5 shrink-0 text-amber-700" />}
-            <div>
-              <h2 id="selling-readiness-heading" className="text-base sm:text-lg font-extrabold text-[#2B1B12]">
-                {readiness.heading}
-              </h2>
-              <p className="mt-1 text-xs sm:text-sm text-[#2B1B12]/65">
-                {readiness.readyToSell
-                  ? "Your account and required approvals are in place."
-                  : "Complete the items below before your kitchen can sell on TasteBridge."}
-              </p>
-              {readiness.readyToSell && kitchen?.isOpen === false && (
-                <p className="mt-2 text-xs text-amber-800">
-                  Your kitchen is currently closed, so customers cannot see your dishes until you open it.
-                </p>
-              )}
+        <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {readiness.checklist.map((item) => <li key={item.id} className={`rounded-xl border p-4 ${item.complete ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+            <div className="flex items-start gap-3"><CheckCircle2 aria-hidden="true" className={`mt-0.5 h-5 w-5 shrink-0 ${item.complete ? "text-emerald-700" : "text-[#2B1B12]/25"}`} />
+              <div className="min-w-0"><p className="text-sm font-bold text-[#2B1B12]">{item.label}</p><p className="mt-1 text-sm leading-relaxed text-[#2B1B12]/70">{item.message}</p>
+                {!item.complete && item.actionHref && <Link to={item.actionHref} className="mt-2 inline-flex min-h-11 items-center gap-1 text-sm font-bold text-[#D2552B] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]">Review kitchen profile <ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>}
+              </div>
             </div>
-          </div>
+          </li>)}
+        </ul>
+      </section>}
 
-          {readiness.showChecklist && (
-            <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {readiness.checklist.map((item) => (
-                <li key={item.id} className={`rounded-2xl border p-4 ${item.complete ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
-                  <div className="flex items-start gap-2.5">
-                    <CheckCircle2 aria-hidden="true" className={`w-4 h-4 mt-0.5 shrink-0 ${item.complete ? "text-emerald-700" : "text-[#2B1B12]/25"}`} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#2B1B12]">{item.label}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-[#2B1B12]/70">{item.message}</p>
-                      {!item.complete && item.actionHref && (
-                        <Link to={item.actionHref} className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-[#D2552B] hover:underline">
-                          Review kitchen profile <ArrowRight aria-hidden="true" className="w-3.5 h-3.5" />
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+      {readiness?.readyToSell && kitchen?.isOpen === false && !readiness.showChecklist && <p className="-mt-4 text-sm text-amber-800">Your kitchen is currently closed, so customers cannot see your dishes until you open it.</p>}
 
-      {/* =========================================================================
-          HERO WELCOME BANNER
-         ========================================================================= */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#D2552B] via-[#C4461C] to-[#2B1B12] text-white p-6 sm:p-8 shadow-xl">
-        <div className="relative z-10 max-w-2xl space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-bold text-[#F4A52A]">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#F4A52A]" />
-              <span>TasteBridge Certified Cook</span>
-            </div>
+      <HeroBanner cookName={cookName} isOpen={isOpen} readiness={readiness} />
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md bg-white/10 text-white">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isOpen ? "bg-emerald-400" : "bg-stone-300"
-                }`}
-              />
-              <span>{isOpen ? "Kitchen Open" : "Kitchen Closed"}</span>
-            </div>
-          </div>
-
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Welcome back, {cookName}!
-          </h2>
-
-          <p className="text-sm text-white/85 leading-relaxed">
-            Your home kitchen is ready to share authentic regional flavors. View today's incoming orders, track customer dining bookings, and curate your heritage dishes.
-          </p>
-
-          <div className="pt-2 flex flex-wrap items-center gap-3">
-            <Link
-              to="/cook/dishes"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white text-[#D2552B] hover:bg-orange-50 rounded-xl text-xs font-bold shadow-sm transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Dish</span>
-            </Link>
-            <Link
-              to="/cook/profile"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold backdrop-blur-xs transition-colors"
-            >
-              <span>View Kitchen Profile</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-            <button
-              onClick={refreshDashboardData}
-              disabled={refreshing}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-black/20 hover:bg-black/30 text-white/80 hover:text-white rounded-xl text-xs font-semibold backdrop-blur-xs transition-colors cursor-pointer"
-              title="Refresh live metrics"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Refresh Data</span>
+      <section aria-labelledby="kitchen-overview-heading" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><h2 id="kitchen-overview-heading" className="text-lg font-extrabold text-[#2B1B12]">Today's Kitchen Overview</h2><p className="mt-1 text-sm text-[#2B1B12]/60">A quick view of your kitchen activity.</p></div>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-[#2B1B12]/60"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true" />Live database sync</span>
+            <button type="button" onClick={refreshDashboardData} disabled={refreshing} aria-label="Refresh dashboard data" title="Refresh dashboard data" className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#2B1B12]/15 bg-white text-[#2B1B12] transition duration-150 hover:border-[#D2552B]/50 hover:text-[#D2552B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
             </button>
           </div>
         </div>
-
-        {/* Decorative background watermark */}
-        <div className="absolute -right-6 -bottom-6 opacity-10 text-white pointer-events-none">
-          <ChefHat className="w-64 h-64" />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-12">
+          {summaryCards.map((card, idx) => <div className="lg:col-span-3" key={`summary-${idx}`}><StatCard card={card} /></div>)}
         </div>
-      </div>
+      </section>
 
-      {/* =========================================================================
-          METRIC CARDS (REAL DATABASE DATA)
-         ========================================================================= */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#2B1B12]/60">
-            Today's Kitchen Overview
-          </h3>
-          <span className="text-[11px] text-[#2B1B12]/50 font-medium">
-            Live database sync
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {summaryCards.map((card, idx) => {
-            const Icon = card.icon;
-            return (
-              <Link
-                key={`summary-${idx}`}
-                to={card.route}
-                className="p-5 bg-white rounded-2xl border border-[#2B1B12]/10 hover:border-[#D2552B]/40 hover:shadow-md transition-all group block"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-[#2B1B12]/70 group-hover:text-[#D2552B] transition-colors">
-                    {card.title}
-                  </span>
-                  <div className={`w-8 h-8 rounded-xl ${card.bgColor} ${card.iconColor} flex items-center justify-center shrink-0`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                </div>
-                <div
-                  className={`font-extrabold text-[#2B1B12] mb-1 ${
-                    card.isUnavailable ? "text-base sm:text-lg text-amber-700/80" : "text-2xl"
-                  }`}
-                >
-                  {card.value}
-                </div>
-                <p className="text-[11px] text-[#2B1B12]/50 font-medium">
-                  {card.description}
-                </p>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* =========================================================================
-          RECENT ORDERS & EXPERIENCES (REAL DATA OR PROPER EMPTY STATE)
-         ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Orders Card */}
-        <div className="p-6 bg-white rounded-3xl border border-[#2B1B12]/10 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#2B1B12]/10">
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="w-4 h-4 text-[#D2552B]" />
-              <h4 className="text-sm font-bold text-[#2B1B12]">Recent Orders Feed</h4>
-            </div>
-            <Link
-              to="/cook/orders"
-              className="text-xs font-bold text-[#D2552B] hover:underline"
-            >
-              View All Orders
-            </Link>
-          </div>
-
-          {recentOrders.length > 0 ? (
-            <div className="space-y-3">
-              {recentOrders.map((ord) => (
-                <div
-                  key={ord.id}
-                  className="p-3.5 bg-[#FFF8F0] rounded-2xl border border-[#2B1B12]/5 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="font-extrabold text-[#2B1B12] truncate">
-                      Order #{ord.orderNumber}
-                    </p>
-                    <p className="text-[#2B1B12]/60 text-[11px]">
-                      Customer: {ord.customer?.name || "Customer"} &bull;{" "}
-                      {ord.items?.length || 0} item(s)
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0 space-y-1">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadge(
-                        ord.status
-                      )}`}
-                    >
-                      {ord.status}
-                    </span>
-                    <p className="font-extrabold text-[#2B1B12] text-xs">
-                      ₹{(ord.cookEarning || ord.totalAmount || 0).toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            /* Clean Empty State when no orders exist */
-            <div className="py-10 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-[#D2552B]/10 text-[#D2552B] flex items-center justify-center mx-auto">
-                <ShoppingBag className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-[#2B1B12]">No active orders right now</p>
-                <p className="text-xs text-[#2B1B12]/60 mt-1 max-w-sm mx-auto">
-                  Incoming orders will appear here with customer names, delivery slots, and preparation countdowns.
-                </p>
-              </div>
-              <Link
-                to="/cook/dishes"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#D2552B] hover:bg-[#C4461C] text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Dishes to Menu</span>
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {/* Upcoming Experiences Card */}
-        <div className="p-6 bg-white rounded-3xl border border-[#2B1B12]/10 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#2B1B12]/10">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#3E5B3A]" />
-              <h4 className="text-sm font-bold text-[#2B1B12]">Dining Experiences</h4>
-            </div>
-            <Link
-              to="/cook/events"
-              className="text-xs font-bold text-[#D2552B] hover:underline"
-            >
-              View Experiences
-            </Link>
-          </div>
-
-          {experiences.length > 0 ? (
-            <div className="space-y-3">
-              {experiences.map((exp) => (
-                <div
-                  key={exp.id}
-                  className="p-3.5 bg-[#FFF8F0] rounded-2xl border border-[#2B1B12]/5 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="font-extrabold text-[#2B1B12] truncate">
-                      {exp.title}
-                    </p>
-                    <p className="text-[#2B1B12]/60 text-[11px]">
-                      {exp.cuisine} &bull; Max {exp.maxGuests} guests
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0 space-y-1">
-                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      {exp.status}
-                    </span>
-                    <p className="font-extrabold text-[#2B1B12] text-xs">
-                      ₹{exp.pricePerPerson} / guest
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            /* Clean Empty State when no dining experiences exist */
-            <div className="py-10 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-[#3E5B3A]/10 text-[#3E5B3A] flex items-center justify-center mx-auto">
-                <CalendarCheck className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-[#2B1B12]">No scheduled dining experiences</p>
-                <p className="text-xs text-[#2B1B12]/60 mt-1 max-w-sm mx-auto">
-                  Host culinary workshops or invite guests to dine at your home table for ancestral food storytelling.
-                </p>
-              </div>
-              <Link
-                to="/cook/events"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-[#2B1B12]/20 hover:border-[#D2552B] text-[#2B1B12] rounded-xl text-xs font-bold transition-all"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#3E5B3A]" />
-                <span>Create New Experience</span>
-              </Link>
-            </div>
-          )}
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-stretch">
+        <div className="lg:col-span-7"><OrdersCard orders={recentOrders} getStatusBadge={getStatusBadge} /></div>
+        <div className="lg:col-span-5"><ExperiencesCard experiences={experiences} /></div>
       </div>
     </div>
   );

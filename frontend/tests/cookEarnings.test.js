@@ -17,15 +17,23 @@ test("cook earnings UI uses real API data and distinguishes collection from sett
   assert.match(page, /role="alert"/);
   assert.match(page, /Loading earnings/);
   assert.match(page, /No matching order earnings/);
-  assert.match(page, /Delivered this month/);
-  assert.match(page, /Delivered previous month/);
+  assert.match(page, /This month/);
+  assert.match(page, /Last month/);
   assert.match(page, /platformCommission/);
-  assert.match(page, /Search order reference/);
+  assert.match(page, /Search order or booking reference/);
   assert.match(page, /Filter by order status/);
   assert.match(page, /Filter by payment status/);
   assert.match(page, /hasNextPage/);
   assert.match(page, /REFUNDED/);
   assert.match(page, /payout settlement is not tracked/i);
+  assert.match(page, /How earnings are counted/);
+  assert.match(page, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(page, /title: "Food Orders"/);
+  assert.match(page, /title: "Dining"/);
+  assert.match(page, /title: "Workshops"/);
+  assert.match(page, /Not tracked/);
+  assert.match(page, /role="tablist"/);
+  assert.match(page, /md:hidden/);
 });
 
 test("earnings API omits unset enum filters so the backend can apply defaults", () => {

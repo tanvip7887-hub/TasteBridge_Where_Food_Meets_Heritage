@@ -305,6 +305,31 @@ export const sendPasswordResetOtpEmail = async ({
   }
 };
 
+const escapeHtml = (value) => String(value ?? "")
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#39;");
+
+export const sendDeliveryCompletionOtpEmail = async ({ to, name, orderNumber, otp, expiresInMinutes = 10 }, options = {}) => {
+  const smtpConfigured = options.smtpConfigured || isSmtpConfigured;
+  if (!smtpConfigured()) throw new Error("SMTP configuration is missing. Cannot deliver email.");
+  const safeName = escapeHtml(name || "TasteBridge customer");
+  const safeOrderNumber = escapeHtml(orderNumber || "your order");
+  const transporter = options.transporter || createTransporter();
+  const info = await transporter.sendMail({
+    from: env.SMTP_FROM,
+    to,
+    subject: "TasteBridge — Delivery verification code",
+    text: `Hello ${name || "TasteBridge customer"},\n\nYour delivery verification code for order ${orderNumber || "your order"} is ${otp}. Share this code with your delivery agent only when your order has arrived. The code expires in ${expiresInMinutes} minutes. If you did not receive this delivery, do not share the code.\n\nTasteBridge`,
+    html: `<!doctype html><html><body style="margin:0;background:#f9fafb;font-family:Arial,sans-serif;color:#374151"><main style="max-width:560px;margin:30px auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px"><h1 style="margin:0;color:#d2552b">TasteBridge</h1><p style="margin-top:4px;color:#6b7280">Where Food Meets Heritage</p><p>Hello ${safeName},</p><p>Use this code to confirm delivery of <strong>${safeOrderNumber}</strong>. Share it with your delivery agent only after your order has arrived.</p><p style="padding:20px;text-align:center;border:1px dashed #d1d5db;border-radius:8px;background:#f3f4f6;font-size:32px;font-weight:800;letter-spacing:8px;color:#d2552b">${escapeHtml(otp)}</p><p>This code expires in ${expiresInMinutes} minutes. If you have not received your order, do not share the code.</p></main></body></html>`,
+  });
+  // Do not include the registered recipient or SMTP message metadata in logs.
+  logger.info("[Email Service] Delivery verification email accepted by SMTP.");
+  return { success: true, messageId: info.messageId };
+};
+
 // Modular email dispatcher for all transactional emails
 export const sendEmailJob = async (jobData) => {
   if (jobData.type === "EMAIL_OTP" || jobData.type === "VERIFICATION_OTP") {
@@ -316,6 +341,9 @@ export const sendEmailJob = async (jobData) => {
   if (jobData.type === "PASSWORD_RESET") {
     return await sendPasswordResetEmail(jobData);
   }
+  if (jobData.type === "DELIVERY_COMPLETION_OTP") {
+    return await sendDeliveryCompletionOtpEmail(jobData);
+  }
   logger.warn(`[Email Service] Unrecognized email job type: ${jobData.type}. Falling back to sendVerificationEmail.`);
   return await sendVerificationEmail(jobData);
 };
@@ -326,5 +354,6 @@ export default {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendPasswordResetOtpEmail,
+  sendDeliveryCompletionOtpEmail,
   sendEmailJob,
 };

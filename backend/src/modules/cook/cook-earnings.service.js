@@ -121,6 +121,8 @@ export const createCookEarningsService = (database, now = () => new Date()) => (
       payoutSettlementTracked: false,
       orders: orders.map((order) => ({
         id: order.id,
+        // This endpoint currently reports persisted food-order earnings only.
+        source: "food_order",
         orderNumber: order.orderNumber,
         status: order.status,
         grossAmount: currencyNumber(order.subtotal),

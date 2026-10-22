@@ -76,6 +76,7 @@ test("cook earnings use saved amounts, payment eligibility, and IST delivery-mon
   assert.deepEqual(result.totals.previousMonth, { grossAmount: 100, platformCommission: 10, netCookEarnings: 90 });
   assert.equal(result.totals.awaitingCodCollection, 90);
   assert.equal(result.orders[0].earningStatus, "EARNED");
+  assert.equal(result.orders[0].source, "food_order");
   assert.equal(result.orders[0].deliveredAt.toISOString(), "2026-10-02T00:00:00.000Z");
   assert.equal(result.orders[1].earningStatus, "AWAITING_COD_COLLECTION");
   assert.equal(result.payoutSettlementTracked, false);

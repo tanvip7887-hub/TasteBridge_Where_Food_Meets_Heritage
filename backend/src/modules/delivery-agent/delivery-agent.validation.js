@@ -29,6 +29,13 @@ export const deliveryAgentAvailabilitySchema = {
   body: z.object({ isAvailable: z.boolean() }).strict(),
 };
 
+const deliveryOrderId = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
+export const deliveryCompletionOrderParamsSchema = { params: z.object({ orderId: deliveryOrderId }) };
+export const deliveryCompletionOtpSchema = {
+  params: z.object({ orderId: deliveryOrderId }),
+  body: z.object({ otp: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from the customer's email.") }).strict(),
+};
+
 export const deliveryAgentApplicationSchema = {
   body: z
     .object({

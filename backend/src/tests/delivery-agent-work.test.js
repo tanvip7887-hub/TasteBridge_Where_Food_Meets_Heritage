@@ -14,8 +14,8 @@ const readyAgent = {
 };
 const order = (overrides = {}) => ({
   id: "order-1", customerId: "customer-1", cookId: "cook-1", orderNumber: "TB-1", status: "READY_FOR_PICKUP", paymentStatus: "PENDING",
-  deliveryAgentId: null, deliveryFee: "30.00", deliveryEarning: "30.00", cookName: "Kitchen",
-  items: [{ id: "item-1", name: "Meal", quantity: 2, unitPrice: "50.00", totalPrice: "100.00" }],
+  deliveryAgentId: null, deliveryFee: "30.00", deliveryEarning: "30.00", totalAmount: "141.00", cookName: "Kitchen",
+  items: [{ id: "item-1", name: "Meal", quantity: 2, unitPrice: "50.00", totalPrice: "100.00", dishImage: "https://cdn.example.com/meal.jpg" }],
   checkout: { paymentMethod: "COD", addressSnapshot: { recipientName: "Customer", phone: "9999999999", locality: "Katraj", city: "Pune" } },
   address: null, statusHistory: [], createdAt: new Date(), updatedAt: new Date(), ...overrides,
 });
@@ -30,7 +30,12 @@ test("available deliveries are unassigned pickup-ready orders and omit private a
   const result = await work.listAvailable("user-1");
   assert.equal(query.where.deliveryAgentId, null);
   assert.equal(query.where.status, "READY_FOR_PICKUP");
+  assert.equal(query.include.items.select.dishImage, true);
   assert.equal(result[0].deliveryArea, "Katraj");
+  assert.equal(result[0].totalAmount, 141);
+  assert.equal(result[0].paymentMethod, "COD");
+  assert.equal(result[0].paymentStatus, "PENDING");
+  assert.equal(result[0].items[0].dishImage, "https://cdn.example.com/meal.jpg");
   assert.equal("deliveryAddress" in result[0], false);
   assert.equal("phone" in result[0], false);
 });
@@ -77,7 +82,7 @@ test("claim requires an online, fully ready delivery agent", async () => {
   await assert.rejects(createDeliveryWorkService(offlineDb).claim("user-1", "order-1"), { statusCode: 409 });
 });
 
-test("pickup and completion use guarded transitions and write status history", async () => {
+test("pickup uses the existing guarded transition and direct delivery completion is blocked", async () => {
   const writes = [];
   let currentStatus = "READY_FOR_PICKUP";
   const tx = {
@@ -99,20 +104,14 @@ test("pickup and completion use guarded transitions and write status history", a
   const work = createDeliveryWorkService(database, () => new Date("2026-10-17T12:00:00Z"));
   const afterPickup = await work.transition("user-1", "order-1", "READY_FOR_PICKUP", "OUT_FOR_DELIVERY");
   assert.equal(afterPickup.status, "OUT_FOR_DELIVERY");
-  const afterDelivery = await work.transition("user-1", "order-1", "OUT_FOR_DELIVERY", "DELIVERED");
-  assert.equal(afterDelivery.status, "DELIVERED");
-  assert.equal(afterDelivery.paymentStatus, "PENDING", "delivery alone must not imply COD collection");
-  assert.equal(writes.filter((entry) => entry.history).length, 2);
+  await assert.rejects(work.transition("user-1", "order-1", "OUT_FOR_DELIVERY", "DELIVERED"), { statusCode: 409 });
+  assert.equal(currentStatus, "OUT_FOR_DELIVERY");
+  assert.equal(writes.filter((entry) => entry.history).length, 1);
   assert.deepEqual(writes.filter((entry) => entry.notification).map(({ notification }) => [notification.userId, notification.portal, notification.metadata.kind, notification.eventKey]), [
     ["customer-1", "CUSTOMER", "ORDER_STATUS", "order:order-1:transition:READY_FOR_PICKUP:OUT_FOR_DELIVERY:customer-1"],
     ["user-1", "DELIVERY_AGENT", "DELIVERY_PICKED_UP", "order:order-1:picked-up:delivery-agent:user-1"],
-    ["customer-1", "CUSTOMER", "ORDER_STATUS", "order:order-1:transition:OUT_FOR_DELIVERY:DELIVERED:customer-1"],
-    ["customer-1", "CUSTOMER", "REVIEW_REQUESTED", "order:order-1:review-request:customer:customer-1"],
-    ["user-1", "DELIVERY_AGENT", "DELIVERY_COMPLETED", "order:order-1:delivered:delivery-agent:user-1"],
   ]);
-  await assert.rejects(work.transition("user-1", "order-1", "OUT_FOR_DELIVERY", "DELIVERED"), { statusCode: 409 });
-  assert.equal(writes.filter((entry) => entry.history).length, 2);
-  assert.equal(writes.filter((entry) => entry.notification).length, 5, "repeated transition creates no duplicate notices");
+  assert.equal(writes.filter((entry) => entry.notification).length, 2, "blocked direct completion creates no completion notices");
 });
 
 test("COD collection is an explicit guarded payment transition and retries are idempotent", async () => {

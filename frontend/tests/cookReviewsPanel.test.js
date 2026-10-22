@@ -16,8 +16,7 @@ test("CookReviewsPage displays customer rating, comment, subject name, date, ver
   const pageCode = await read("../src/pages/cook/panel/CookReviewsPage.jsx");
 
   // Rating and star
-  assert.match(pageCode, /review\.rating\}\/5/);
-  assert.match(pageCode, /fill-amber-400/);
+  assert.match(pageCode, /StarRating rating=\{review\.rating\}/);
 
   // Customer comment
   assert.match(pageCode, /review\.comment/);
@@ -42,10 +41,10 @@ test("CookReviewsPage provides All, Food, Events, and Needs Reply filters", asyn
   const pageCode = await read("../src/pages/cook/panel/CookReviewsPage.jsx");
 
   // Filter tabs
-  assert.match(pageCode, />\s*All\s*<\/button>/);
-  assert.match(pageCode, />\s*Food\s*<\/button>/);
-  assert.match(pageCode, />\s*Events\s*<\/button>/);
-  assert.match(pageCode, />\s*Needs Reply\s*<\/button>/);
+  assert.match(pageCode, /label: "All"/);
+  assert.match(pageCode, /label: "Food"/);
+  assert.match(pageCode, /label: "Events"/);
+  assert.match(pageCode, /label: "Needs Reply"/);
 
   // Query parameters applied
   assert.match(pageCode, /filterType\s*\?\s*\{\s*type:\s*filterType\s*\}\s*:\s*\{\}/);
@@ -64,8 +63,9 @@ test("CookReviewsPage enforces single reply up to 300 characters and prevents se
   assert.match(pageCode, /reviewsApi\.reply\(review\.id,\s*draft\)/);
 
   // If already replied, shows cook reply card instead of reply form
-  assert.match(pageCode, /review\.cookReply\s*\?\s*\(/);
-  assert.match(pageCode, /Replied/);
+  assert.match(pageCode, /review\.cookReply && <ReplyBlock review=\{review\} \/>/);
+  assert.match(pageCode, /aria-expanded=\{isReplyOpen\}/);
+  assert.match(pageCode, /onKeyDown=\{\(event\) => \{ if \(event\.key === "Escape"\)/);
 });
 
 test("CookReviewsPage provides accessible report modal with 5 to 500 characters validation without hiding review", async () => {
@@ -86,7 +86,26 @@ test("CookReviewsPage provides accessible report modal with 5 to 500 characters 
 
   // Shows reported badge and disables report button if already reported
   assert.match(pageCode, /review\.isReported/);
-  assert.match(pageCode, /Reported for review/);
+  assert.match(pageCode, /Reported, under moderation/);
+});
+
+test("Cook reviews use the compact tabbed card layout and pending reply state", async () => {
+  const [pageCode, thumbnail] = await Promise.all([
+    read("../src/pages/cook/panel/CookReviewsPage.jsx"),
+    read("../src/components/reviews/ReviewThumbnail.jsx"),
+  ]);
+  assert.match(pageCode, /<h1 className="sr-only">Customer reviews<\/h1>/);
+  assert.doesNotMatch(pageCode, /Customer reviews<\/h1>[\s\S]*?Refresh/);
+  assert.match(pageCode, /max-w-\[1180px\]/);
+  assert.match(pageCode, /overflow-x-auto border-b border-gray-200 pb-3 scrollbar-none/);
+  assert.match(pageCode, /<ul className="space-y-5"/);
+  assert.match(pageCode, /<article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition duration-150 hover:-translate-y-0\.5/);
+  assert.match(pageCode, /No written review/);
+  assert.match(pageCode, /line-clamp-4/);
+  assert.match(pageCode, /Reported, under moderation/);
+  assert.match(pageCode, /tabCounts=\{tabCounts\}/);
+  assert.match(pageCode, /setTabCounts\(\(previous\) => \(\{ \.\.\.previous, \[`\$\{filterType\}:\$\{filterNeedsReply\}`\]: payload\.pagination\.total \}\)\)/);
+  assert.match(thumbnail, /size === "small" \? "h-14 w-14"/);
 });
 
 test("CookReviewsPage displays moderation badges for hidden and removed reviews", async () => {

@@ -67,7 +67,24 @@ export const listCurrentDeliveries = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 export const markDeliveryPickedUp = deliveryWorkHandler("markDeliveryPickedUp", "Delivery marked as out for delivery");
-export const markDeliveryCompleted = deliveryWorkHandler("markDeliveryCompleted", "Delivery marked as delivered");
+export const requestDeliveryCompletionOtp = async (req, res, next) => {
+  try {
+    const data = await deliveryAgentService.requestDeliveryCompletionOtp(req.user.id, req.params.orderId);
+    return sendSuccess(res, HTTP_STATUS.OK, "Delivery verification email requested", data);
+  } catch (err) { next(err); }
+};
+export const getDeliveryCompletionOtpStatus = async (req, res, next) => {
+  try {
+    const data = await deliveryAgentService.getDeliveryCompletionOtpStatus(req.user.id, req.params.orderId);
+    return sendSuccess(res, HTTP_STATUS.OK, "Delivery verification email status retrieved", data);
+  } catch (err) { next(err); }
+};
+export const markDeliveryCompleted = async (req, res, next) => {
+  try {
+    const data = await deliveryAgentService.markDeliveryCompleted(req.user.id, req.params.orderId, req.body.otp);
+    return sendSuccess(res, HTTP_STATUS.OK, "Delivery marked as delivered", data);
+  } catch (err) { next(err); }
+};
 export const confirmCodCollection = async (req, res, next) => {
   try {
     const data = await deliveryAgentService.confirmCodCollection(req.user.id, req.params.id);

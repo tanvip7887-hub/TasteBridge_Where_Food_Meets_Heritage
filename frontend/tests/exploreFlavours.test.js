@@ -87,7 +87,7 @@ test("regional cards use distinct iconic dish photos while retaining API categor
     Andhra: "Andhra-style chicken curry",
     Bengali: "Bengali mishti doi",
     Goan: "Goan fish curry",
-    Gujarati: "Gujarati dhokla",
+    Gujarati: "Gujarati thali",
     Hyderabadi: "Hyderabadi chicken biryani",
     Kashmiri: "Kashmiri rogan josh",
     Kerala: "Kerala appam with vegetable stew",

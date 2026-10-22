@@ -18,8 +18,9 @@ test("My Events separates upcoming, past, and cancelled booking statuses", () =>
 });
 
 test("My Events page, route, account menu, and API use the authenticated booking endpoint", async () => {
-  const [page, routes, navbar, api] = await Promise.all([
+  const [page, bookingCard, routes, navbar, api] = await Promise.all([
     read("../src/pages/MyEventsPage.jsx"),
+    read("../src/components/bookings/BookingCard.jsx"),
     read("../src/routes/AppRoutes.jsx"),
     read("../src/components/layout/Navbar.jsx"),
     read("../src/api/eventsApi.js"),
@@ -31,15 +32,15 @@ test("My Events page, route, account menu, and API use the authenticated booking
   assert.match(navbar, /to="\/my-events"[\s\S]*?My Events/);
   assert.match(api, /api\.get\("\/events\/my-bookings\/dine", config\)/);
   assert.match(api, /api\.get\("\/events\/my-bookings\/workshops", config\)/);
-  assert.match(page, /No \{isWorkshop \? "workshop" : "Dine"\} bookings yet/);
+  assert.match(page, /No \{title\.toLowerCase\(\)\} bookings/);
   assert.match(page, /Loading your events/);
   assert.match(page, /role="alert"/);
   assert.match(page, /Upcoming/);
   assert.match(page, /Past/);
   assert.match(page, /Cancelled/);
-  assert.match(page, /Experience booking/);
-  assert.match(page, /Reference:/);
-  assert.match(page, /booking\.venue/);
+  assert.match(bookingCard, /Experience booking/);
+  assert.match(bookingCard, /Reference:/);
+  assert.match(bookingCard, /booking\.venue/);
 });
 
 test("My Events direct-route guard preserves login redirect and denies non-Customer roles", async () => {

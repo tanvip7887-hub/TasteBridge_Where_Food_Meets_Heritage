@@ -19,9 +19,9 @@ export const regionalCuisinePhotos = Object.freeze({
     "https://commons.wikimedia.org/wiki/File:Goan_Fish_Curry.jpg",
   ),
   gujarati: photo(
-    "Gujarati dhokla",
-    "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4f/Food-Dhokla.jpg/960px-Food-Dhokla.jpg",
-    "https://commons.wikimedia.org/wiki/File:Food-Dhokla.jpg",
+    "Gujarati thali",
+    "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/52/Ahmedabad-gujarati_thali.jpg/960px-Ahmedabad-gujarati_thali.jpg",
+    "https://commons.wikimedia.org/wiki/File:Ahmedabad-gujarati_thali.jpg",
   ),
   hyderabadi: photo(
     "Hyderabadi chicken biryani",

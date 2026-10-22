@@ -29,6 +29,31 @@ test("new event form separates total seats from per-booking guests and publishes
   assert.doesNotMatch(page, /createExperience\(data\).*uploadExperiencePhoto/s);
 });
 
+test("Home Dining Theme dropdown uses the existing active regional food categories", async () => {
+  const [page, api, explore, discovery, card] = await Promise.all([
+    read("../src/pages/cook/panel/CookExperiencesPage.jsx"),
+    read("../src/api/cookApi.js"),
+    read("../src/pages/ExplorePage.jsx"),
+    read("../src/components/events/DineExperienceDiscovery.jsx"),
+    read("../src/components/events/ExperienceCard.jsx"),
+  ]);
+  assert.match(api, /getCategories: \(\) => api\.get\("\/categories"\)/);
+  assert.match(page, /cookApi\.getCategories\(\)/);
+  assert.match(page, /themeCategories\.map\(\(category\) => <option key=\{category\.id\} value=\{category\.name\}>\{category\.name\}<\/option>\)/);
+  assert.match(explore, /regionalCategories=\{categories\}/);
+  assert.match(discovery, /categories=\{regionalCategories\}/);
+  assert.match(card, /getExperienceImage\(experience, 800, categories\)/);
+});
+
+test("Cook My events shows the same theme-selected Home Dining image as customer discovery", async () => {
+  const [page, card] = await Promise.all([
+    read("../src/pages/cook/panel/CookExperiencesPage.jsx"),
+    read("../src/components/events/ExperienceCard.jsx"),
+  ]);
+  assert.match(card, /export const ExperienceImage/);
+  assert.match(page, /experience\.type === "HOME_DINING" && <ExperienceImage experience=\{experience\} type="dining" horizontal categories=\{themeCategories\} \/>/);
+});
+
 test("publishing form validates required values, converts IST date/time, prevents duplicate submits and refreshes persisted status", async () => {
   const [page, validation, dateTime] = await Promise.all([
     read("../src/pages/cook/panel/CookExperiencesPage.jsx"),
@@ -76,19 +101,20 @@ test("Workshop form captures learning details and an image while Dine-only menu 
 });
 
 test("customers can open public Workshop detail and book only from its existing available slots", async () => {
-  const [route, detail, discovery, api] = await Promise.all([
+  const [route, detail, discovery, card, api] = await Promise.all([
     read("../src/routes/AppRoutes.jsx"),
     read("../src/pages/WorkshopDetailPage.jsx"),
     read("../src/components/events/DineExperienceDiscovery.jsx"),
+    read("../src/components/events/ExperienceCard.jsx"),
     read("../src/api/eventsApi.js"),
   ]);
   assert.match(route, /path="workshops\/:id" element={<WorkshopDetailPage \/>}/);
   assert.match(detail, /experienceId=\{id\}/);
   assert.match(api, /getExperience: \(id, config = \{\}\) => api\.get\(`\/experiences\//);
-  assert.match(discovery, /experience\.learningOutcomes/);
-  assert.match(discovery, /experience\.teachingContent/);
-  assert.match(discovery, /experience\.materialsToBring/);
-  assert.match(discovery, /isWorkshop && !detailView/);
+  assert.match(card, /experience\.learningOutcomes/);
+  assert.match(card, /experience\.teachingContent/);
+  assert.match(card, /experience\.materialsToBring/);
+  assert.match(card, /isWorkshop && !detailView/);
   assert.match(discovery, /submitBooking\(experience\)/);
 });
 
@@ -126,4 +152,18 @@ test("event cards retain listing, status management, availability and error reco
   assert.match(page, /Add date/);
   assert.match(page, /formatIstDateTime\(slot\.startsAt\)/);
   assert.match(page, />Retry</);
+});
+
+test("Cook My events filters by URL type and groups mixed results by event type", async () => {
+  const page = await read("../src/pages/cook/panel/CookExperiencesPage.jsx");
+  assert.match(page, /useSearchParams/);
+  assert.match(page, /requestedType === "dining" \|\| requestedType === "workshop"/);
+  assert.match(page, /next\.set\("type", type\)/);
+  assert.match(page, /next\.delete\("type"\)/);
+  assert.match(page, /items: diningExperiences/);
+  assert.match(page, /items: workshops/);
+  assert.match(page, /label: "Dining Experiences"/);
+  assert.match(page, /label: "Workshops"/);
+  assert.match(page, /<h1 className="sr-only">My events<\/h1>/);
+  assert.doesNotMatch(page, /<button[^>]*>[^<]*Refresh<\/button>/);
 });

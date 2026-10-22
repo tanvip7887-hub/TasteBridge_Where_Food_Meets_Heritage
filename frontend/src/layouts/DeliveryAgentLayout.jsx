@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { useDispatch, useSelector } from "react-redux";
 import {
   Bell, Bike, Compass, History, Home, Loader2,
-  LogOut, Menu, PackageCheck, RefreshCw, UserRound, Wallet, X,
+  LogOut, Menu, PackageCheck, PanelLeftClose, PanelLeftOpen, RefreshCw, UserRound, Wallet, X,
 } from "lucide-react";
 import { logout } from "../store/slices/authSlice.js";
 import { deliveryAgentApi } from "../api/deliveryAgentApi.js";
@@ -32,6 +32,7 @@ export const DeliveryAgentLayout = () => {
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -203,6 +204,15 @@ export const DeliveryAgentLayout = () => {
   const readiness = dashboard?.readiness;
   const capabilities = dashboard?.capabilities || {};
   const isOnline = dashboard?.agent?.isOnline === true;
+  const pageTitle = ({
+    "/delivery-agent": "Home",
+    "/delivery-agent/available": "Available deliveries",
+    "/delivery-agent/current": "Current delivery",
+    "/delivery-agent/history": "History",
+    "/delivery-agent/earnings": "Earnings",
+    "/delivery-agent/profile": "My profile",
+  })[location.pathname];
+  const headerTitle = pageTitle || dashboard?.agent?.name || user?.name || "Delivery Agent";
   const availabilityLocked = !readiness?.readyToWork || availabilityUpdating;
 
   const toggleAvailability = async () => {
@@ -225,11 +235,11 @@ export const DeliveryAgentLayout = () => {
     navigate("/");
   };
 
-  const renderNavigation = (mobile = false) => (
-    <nav aria-label="Delivery agent navigation" className="space-y-5">
+  const renderNavigation = (mobile = false, collapsed = false) => (
+    <nav aria-label="Delivery agent navigation" className={collapsed ? "space-y-4" : "space-y-5"}>
       {navigationGroups.map((group) => (
-        <section key={group.title}>
-          {group.title !== "Home" && <h2 className="mb-2 px-3 text-[10px] font-extrabold uppercase tracking-wider text-[#FFF8F0]/40">{group.title}</h2>}
+        <section key={group.title} className={collapsed ? "text-center" : ""}>
+          {group.title !== "Home" && <h2 className={`mb-2 px-3 text-[10px] font-extrabold uppercase tracking-wider text-[#FFF8F0]/40 ${collapsed ? "lg:hidden" : ""}`}>{group.title}</h2>}
           <div className="space-y-1">
             {group.items.map(({ label, path, icon: Icon, end }) => {
               const isOperationalSection = group.title === "Deliveries" || group.title === "Money";
@@ -244,9 +254,9 @@ export const DeliveryAgentLayout = () => {
 
               if (locked) {
                 return (
-                  <div key={path} aria-disabled="true" title={explanation} className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold text-[#FFF8F0]/35">
+                  <div key={path} aria-disabled="true" title={collapsed ? `${label}: ${explanation}` : explanation} className={`flex cursor-not-allowed items-center ${collapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-xl py-2 text-xs font-bold text-[#FFF8F0]/35`}>
                     <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{label}</span>
+                    <span className={collapsed ? "lg:hidden" : ""}>{label}</span>
                     <span className="sr-only">Unavailable. {explanation}</span>
                   </div>
                 );
@@ -258,17 +268,18 @@ export const DeliveryAgentLayout = () => {
                   to={path}
                   end={end}
                   onClick={() => { if (mobile) setMobileMenuOpen(false); }}
-                  className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${isActive ? "bg-[#D2552B] text-white shadow-md shadow-[#D2552B]/20" : "text-[#FFF8F0]/75 hover:bg-[#FFF8F0]/10 hover:text-white"}`}
+                  title={collapsed ? label : undefined}
+                  className={({ isActive }) => `flex items-center ${collapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-xl py-2 text-xs font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${isActive ? "bg-[#D2552B] text-white shadow-md shadow-[#D2552B]/20" : "text-[#FFF8F0]/75 hover:bg-[#FFF8F0]/10 hover:text-white"}`}
                 >
                   <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>{label}</span>
+                  <span className={collapsed ? "lg:hidden" : ""}>{label}</span>
                 </NavLink>
               );
             })}
           </div>
         </section>
       ))}
-      {(!readiness?.readyToWork || !capabilities.deliveryAssignmentAvailable || !capabilities.earningsAvailable) && (
+      {!collapsed && (!readiness?.readyToWork || !capabilities.deliveryAssignmentAvailable || !capabilities.earningsAvailable) && (
         <p className="mx-3 border-t border-white/10 pt-3 text-[11px] leading-5 text-white/50">
           Delivery tools unlock after verification and when assignments are available.
         </p>
@@ -276,28 +287,33 @@ export const DeliveryAgentLayout = () => {
     </nav>
   );
 
-  const signOutButton = (
-    <button type="button" onClick={handleLogout} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition-colors hover:bg-red-950/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
-      <LogOut className="h-4 w-4" aria-hidden="true" /> Sign Out
+  const signOutButton = (collapsed = false) => (
+    <button type="button" onClick={handleLogout} aria-label={collapsed ? "Sign Out" : undefined} title={collapsed ? "Sign Out" : undefined} className={`flex min-h-11 w-full items-center ${collapsed ? "justify-center px-0" : "gap-2.5 px-3"} rounded-xl py-2 text-xs font-semibold text-red-400 transition-colors hover:bg-red-950/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300`}>
+      <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />{!collapsed && " Sign Out"}
     </button>
   );
 
   return (
     <div className="min-h-screen bg-[#FFF8F0] text-[#2B1B12] lg:flex">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-[#2B1B12]/20 bg-[#2B1B12] text-[#FFF8F0] lg:flex">
-        <Link to="/delivery-agent" className="flex min-h-[88px] items-center gap-3 border-b border-[#FFF8F0]/10 px-5" aria-label="TasteBridge Delivery Agent Panel home">
+      <aside className={`sticky top-0 hidden h-screen ${sidebarCollapsed ? "w-[76px]" : "w-64"} shrink-0 flex-col overflow-y-auto border-r border-[#2B1B12]/20 bg-[#2B1B12] text-[#FFF8F0] transition-[width] duration-200 lg:flex`}>
+        <div className={`flex min-h-[88px] items-center border-b border-[#FFF8F0]/10 ${sidebarCollapsed ? "flex-col justify-center gap-2 px-2 py-3" : "justify-between gap-3 px-5"}`}>
+        <Link to="/delivery-agent" className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""}`} aria-label="TasteBridge Delivery Agent Panel home" title={sidebarCollapsed ? "TasteBridge Delivery Agent Panel home" : undefined}>
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-red-600 to-amber-500 text-white shadow-md shadow-red-500/20"><Bike className="h-5 w-5" aria-hidden="true" /></span>
-          <span><span className="block bg-gradient-to-r from-red-500 via-amber-400 to-amber-300 bg-clip-text text-xl font-bold leading-tight text-transparent">TasteBridge</span><span className="-mt-0.5 block text-[9px] font-semibold uppercase tracking-wider text-amber-400">Delivery Panel</span></span>
+          <span className={sidebarCollapsed ? "lg:hidden" : ""}><span className="block bg-gradient-to-r from-red-500 via-amber-400 to-amber-300 bg-clip-text text-xl font-bold leading-tight text-transparent">TasteBridge</span><span className="-mt-0.5 block text-[9px] font-semibold uppercase tracking-wider text-amber-400">Delivery Panel</span></span>
         </Link>
-        <div className="flex-1 overflow-y-auto space-y-4 px-3 py-4">{renderNavigation()}</div>
-        <div className="space-y-1.5 border-t border-[#FFF8F0]/10 p-3">{signOutButton}</div>
+        <button type="button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#FFF8F0]/70 transition-colors hover:bg-[#FFF8F0]/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
+          {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+        </button>
+        </div>
+        <div className={`flex-1 overflow-y-auto ${sidebarCollapsed ? "space-y-4 px-2 py-4" : "space-y-4 px-3 py-4"}`}>{renderNavigation(false, sidebarCollapsed)}</div>
+        <div className={`border-t border-[#FFF8F0]/10 ${sidebarCollapsed ? "p-2" : "p-3"}`}>{signOutButton(sidebarCollapsed)}</div>
       </aside>
 
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 relative flex min-h-[72px] items-center justify-between gap-3 border-b border-[#2B1B12]/10 bg-[#FFF8F0]/95 px-4 py-3 backdrop-blur-md sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button type="button" onClick={() => setMobileMenuOpen(true)} className="shrink-0 rounded-xl border border-[#2B1B12]/10 p-2 text-[#2B1B12] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 lg:hidden" aria-label="Open delivery navigation"><Menu className="h-5 w-5" /></button>
-            <div className="min-w-0"><p className="truncate text-base font-extrabold tracking-tight text-[#2B1B12] sm:text-lg">{dashboard?.agent?.name || user?.name || "Delivery Agent"}</p><p className="hidden text-[10px] text-[#2B1B12]/50 md:block">TasteBridge Delivery Agent Panel</p></div>
+            <div className="min-w-0"><p className="truncate text-base font-extrabold tracking-tight text-[#2B1B12] sm:text-lg">{headerTitle}</p><p className="hidden text-[10px] text-[#2B1B12]/50 md:block">TasteBridge Delivery Agent Panel</p></div>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {canLoadDeliveryAgentNotifications && (
@@ -380,14 +396,14 @@ export const DeliveryAgentLayout = () => {
         </header>
 
         {availabilityError && <p className="mx-4 mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 sm:mx-6" role="alert">{availabilityError}</p>}
-        <main className="p-4 sm:p-6 lg:p-8"><Outlet context={{ dashboard, loading, loadError, refreshDashboard }} /></main>
+        <main className="p-4 sm:p-6 lg:p-8"><Outlet context={{ dashboard, loading, loadError, refreshDashboard, isOnline, availabilityUpdating, toggleAvailability }} /></main>
       </div>
 
       {mobileMenuOpen && <div className="fixed inset-0 z-50 lg:hidden" role="presentation">
         <button type="button" className="absolute inset-0 bg-black/50" aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)} />
         <aside className="relative flex h-full w-[min(16rem,85vw)] flex-col bg-[#2B1B12] text-[#FFF8F0] shadow-2xl" aria-label="Mobile delivery navigation">
           <div className="flex min-h-[76px] items-center justify-between border-b border-[#FFF8F0]/10 px-4"><Link to="/delivery-agent" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 font-bold"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-red-600 to-amber-500"><Bike className="h-5 w-5" /></span><span><span className="block">TasteBridge</span><span className="block text-[9px] font-semibold uppercase tracking-wider text-amber-400">Delivery Panel</span></span></Link><button type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close navigation" className="rounded-lg p-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"><X className="h-5 w-5" /></button></div>
-          <div className="flex-1 overflow-y-auto space-y-4 px-3 py-4">{renderNavigation(true)}</div><div className="border-t border-[#FFF8F0]/10 p-3">{signOutButton}</div>
+          <div className="flex-1 overflow-y-auto space-y-4 px-3 py-4">{renderNavigation(true)}</div><div className="border-t border-[#FFF8F0]/10 p-3">{signOutButton(false)}</div>
         </aside>
       </div>}
     </div>

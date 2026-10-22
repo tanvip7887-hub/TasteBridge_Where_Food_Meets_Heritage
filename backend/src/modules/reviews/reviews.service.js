@@ -2,6 +2,7 @@ import { AppError } from "../../utils/AppError.js";
 import { HTTP_STATUS } from "../../constants/index.js";
 import { createNotificationsService } from "../notifications/notifications.service.js";
 import { currencyNumber } from "../../utils/money.js";
+import { isIP } from "node:net";
 
 const WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -23,6 +24,24 @@ const publicName = (name) => {
   if (!words.length) return "TasteBridge customer";
   return words.length > 1 ? `${words[0]} ${words.at(-1)[0].toUpperCase()}.` : words[0];
 };
+const publicKitchenName = (value) => {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  return name && name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(name) ? name : null;
+};
+const publicImageUrl = (value) => {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (!host || isIP(host) || !host.includes(".") || /\.(?:localhost|local|internal|test|example|invalid)$/.test(host)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+const experienceImage = (experience) => experience?.image || experience?.photos?.[0] || null;
 const publicReview = (review) => ({
   id: review.id,
   reviewType: review.reviewType,
@@ -41,9 +60,31 @@ const cookReviewSelect = {
   isReported: true, reportReason: true, createdAt: true, cookReply: true,
   cookRepliedAt: true, subjectNameSnapshot: true, cookNameSnapshot: true,
   customer: { select: { name: true } },
-  dish: { select: { name: true } },
-  order: { select: { orderNumber: true, status: true } },
-  experienceBooking: { select: { id: true, status: true, bookingDate: true, completedAt: true } },
+  dish: { select: { name: true, image: true } },
+  order: { select: {
+    orderNumber: true,
+    status: true,
+    cook: { select: { businessName: true, profileImage: true } },
+  } },
+  experienceBooking: { select: {
+    id: true,
+    status: true,
+    bookingDate: true,
+    completedAt: true,
+    experience: { select: {
+      image: true,
+      photos: true,
+      cook: { select: { businessName: true, profileImage: true } },
+    } },
+  } },
+};
+const customerReviewSelect = {
+  id: true, reviewType: true, rating: true, comment: true, status: true,
+  createdAt: true, cookReply: true, cookRepliedAt: true,
+  subjectNameSnapshot: true, cookNameSnapshot: true,
+  dish: { select: { name: true, image: true } },
+  cook: { select: { businessName: true, profileImage: true } },
+  experienceBooking: { select: { experience: { select: { image: true, photos: true } } } },
 };
 
 const checkFoodEligibility = async (database, customerId, orderItemId, now) => {
@@ -118,12 +159,13 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
         },
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         include: {
-          dish: { select: { name: true } },
+          dish: { select: { name: true, image: true } },
           order: {
             select: {
               id: true,
               orderNumber: true,
               checkoutId: true,
+              cook: { select: { businessName: true, profileImage: true } },
               statusHistory: {
                 where: { toStatus: "DELIVERED" },
                 orderBy: [{ changedAt: "desc" }, { id: "desc" }],
@@ -144,7 +186,12 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
         },
         orderBy: [{ completedAt: "desc" }, { id: "asc" }],
         include: {
-          experience: { select: { title: true } },
+          experience: { select: {
+            title: true,
+            image: true,
+            photos: true,
+            cook: { select: { businessName: true, profileImage: true } },
+          } },
           review: { select: { id: true } },
         },
       }),
@@ -162,6 +209,10 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
         dishId: item.dishId,
         orderReference: item.order.orderNumber,
         subjectName: item.dish?.name || item.name,
+        dishImageUrl: publicImageUrl(item.dish?.image),
+        experienceImageUrl: null,
+        kitchenName: publicKitchenName(item.order.cook?.businessName),
+        kitchenPhotoUrl: publicImageUrl(item.order.cook?.profileImage),
         deliveredAt,
         completedAt: deliveredAt,
       }];
@@ -176,6 +227,10 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
         experienceId: booking.experienceId,
         orderReference: booking.id,
         subjectName: booking.experience?.title || "TasteBridge dining event",
+        dishImageUrl: null,
+        experienceImageUrl: publicImageUrl(experienceImage(booking.experience)),
+        kitchenName: publicKitchenName(booking.experience?.cook?.businessName),
+        kitchenPhotoUrl: publicImageUrl(booking.experience?.cook?.profileImage),
         completedAt: booking.completedAt,
       }];
     });
@@ -190,7 +245,7 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
   async listMine(customerId, { page, limit }) {
     const where = { customerId };
     const [items, total] = await Promise.all([
-      database.review.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * limit, take: limit, select: cookReviewSelect }),
+      database.review.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * limit, take: limit, select: customerReviewSelect }),
       database.review.count({ where }),
     ]);
     const current = now();
@@ -198,6 +253,10 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
       id: item.id, reviewType: item.reviewType, rating: item.rating, comment: item.comment,
       status: item.status, subjectName: item.subjectNameSnapshot || item.dish?.name || "TasteBridge experience",
       cookName: item.cookNameSnapshot, cookReply: item.cookReply, cookRepliedAt: item.cookRepliedAt,
+      dishImageUrl: item.reviewType === "FOOD" ? publicImageUrl(item.dish?.image) : null,
+      experienceImageUrl: item.reviewType === "EXPERIENCE" ? publicImageUrl(experienceImage(item.experienceBooking?.experience)) : null,
+      kitchenName: publicKitchenName(item.cook?.businessName),
+      kitchenPhotoUrl: publicImageUrl(item.cook?.profileImage),
       createdAt: item.createdAt, editable: item.status === "PUBLISHED" && inWindow(item.createdAt, current, EDIT_WINDOW_MS),
     })), page, limit, total);
   },
@@ -381,12 +440,24 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
       database.review.count({ where }),
     ]);
     return pageResult(
-      items.map((item) => ({
+      items.map(({ dish, order, experienceBooking, ...item }) => ({
         ...item,
-        subjectName: item.subjectNameSnapshot || item.dish?.name || "TasteBridge experience",
+        dish: dish ? { name: dish.name } : null,
+        order: order ? { orderNumber: order.orderNumber, status: order.status } : null,
+        experienceBooking: experienceBooking ? {
+          id: experienceBooking.id,
+          status: experienceBooking.status,
+          bookingDate: experienceBooking.bookingDate,
+          completedAt: experienceBooking.completedAt,
+        } : null,
+        subjectName: item.subjectNameSnapshot || dish?.name || "TasteBridge experience",
         customerName: publicName(item.customer?.name),
-        verified: item.reviewType === "FOOD" ? item.order?.status === "DELIVERED" : item.experienceBooking?.status === "COMPLETED",
+        verified: item.reviewType === "FOOD" ? order?.status === "DELIVERED" : experienceBooking?.status === "COMPLETED",
         verifiedBadge: item.reviewType === "FOOD" ? "VERIFIED_ORDER" : "ATTENDED_EVENT",
+        dishImageUrl: item.reviewType === "FOOD" ? publicImageUrl(dish?.image) : null,
+        experienceImageUrl: item.reviewType === "EXPERIENCE" ? publicImageUrl(experienceImage(experienceBooking?.experience)) : null,
+        kitchenName: publicKitchenName(item.reviewType === "FOOD" ? order?.cook?.businessName : experienceBooking?.experience?.cook?.businessName),
+        kitchenPhotoUrl: publicImageUrl(item.reviewType === "FOOD" ? order?.cook?.profileImage : experienceBooking?.experience?.cook?.profileImage),
       })),
       page,
       limit,
@@ -468,8 +539,9 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
             include: {
               customer: { select: { name: true } },
               cook: { select: { businessName: true } },
-              dish: { select: { name: true } },
+              dish: { select: { name: true, image: true } },
               order: { select: { orderNumber: true } },
+              experienceBooking: { select: { id: true, experience: { select: { image: true, photos: true } } } },
             },
           },
         },
@@ -496,6 +568,10 @@ export const createReviewsService = (database, { now = () => new Date() } = {}) 
         cookName: report.review.cookNameSnapshot || report.review.cook?.businessName || "TasteBridge cook",
         customerName: publicName(report.review.customer?.name),
         orderNumber: report.review.order?.orderNumber || null,
+        bookingId: report.review.experienceBooking?.id || null,
+        itemImageUrl: publicImageUrl(report.review.reviewType === "FOOD"
+          ? report.review.dish?.image
+          : experienceImage(report.review.experienceBooking?.experience)),
         cookReply: report.review.cookReply,
         cookRepliedAt: report.review.cookRepliedAt,
         isReported: report.review.isReported,

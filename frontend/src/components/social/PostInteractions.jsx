@@ -76,7 +76,7 @@ export const PostLikeButton = ({ postId, count = 0, onCountChange }) => {
     <button type="button" onClick={toggle} disabled={busy || loadingState || (isAuthenticated && !currentLikeState)} aria-pressed={liked} aria-busy={busy || loadingState}
       aria-label={`${liked ? "Unlike" : "Like"} Post; ${currentLikeState?.likeCount ?? count} likes`}
       title={!isAuthenticated ? "Sign in to like this Post" : undefined}
-      className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2 text-sm font-semibold text-[#2B1B12]/75 hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-60">
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-2 text-sm font-semibold text-[#2B1B12]/75 transition hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-60">
       {busy || loadingState ? <LoaderCircle size={18} className="animate-spin" /> : <Heart size={18} className={liked ? "fill-rose-500 text-rose-500" : ""} />}
       <span>{currentLikeState?.likeCount ?? count}</span>
     </button>

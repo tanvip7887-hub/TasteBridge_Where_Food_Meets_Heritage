@@ -93,6 +93,168 @@ test("event reviews fail closed because completed bookings have no authoritative
   }
 });
 
+test("pending review items include only validated public image and kitchen fields for food and events", async () => {
+  const { database } = makeDb();
+  const food = foodItem({
+    dish: { id: "dish-1", name: "Dish", image: "https://images.example.com/dish.jpg", phone: "private" },
+    order: { ...foodItem().order, cook: { businessName: "Kitchen One", profileImage: "https://images.example.com/kitchen.jpg", email: "private" } },
+  });
+  const event = {
+    id: "booking-2", experienceId: "experience-2", customerId: "customer-1", status: "COMPLETED", completedAt: recent,
+    experience: {
+      title: "Cooking event", image: null, photos: ["https://images.example.com/event.jpg", "https://images.example.com/second.jpg"],
+      cook: { businessName: "Kitchen Two", profileImage: "https://images.example.com/kitchen-two.jpg", phone: "private" },
+    },
+  };
+  database.orderItem.findMany = async ({ include }) => {
+    assert.equal(include.dish.select.image, true);
+    assert.equal(include.order.select.cook.select.profileImage, true);
+    return [food];
+  };
+  database.experienceBooking.findMany = async ({ include }) => {
+    assert.equal(include.experience.select.image, true);
+    assert.equal(include.experience.select.photos, true);
+    assert.equal(include.experience.select.cook.select.businessName, true);
+    return [event];
+  };
+
+  const result = await createReviewsService(database, { now: () => now }).listPending("customer-1", { page: 1, limit: 50 });
+  const foodResult = result.items.find((item) => item.reviewType === "FOOD");
+  const eventResult = result.items.find((item) => item.reviewType === "EXPERIENCE");
+  assert.deepEqual([
+    foodResult.dishImageUrl, foodResult.experienceImageUrl, foodResult.kitchenName, foodResult.kitchenPhotoUrl,
+  ], ["https://images.example.com/dish.jpg", null, "Kitchen One", "https://images.example.com/kitchen.jpg"]);
+  assert.deepEqual([
+    eventResult.dishImageUrl, eventResult.experienceImageUrl, eventResult.kitchenName, eventResult.kitchenPhotoUrl,
+  ], [null, "https://images.example.com/event.jpg", "Kitchen Two", "https://images.example.com/kitchen-two.jpg"]);
+  for (const item of result.items) {
+    for (const privateField of ["email", "phone", "address", "isReported", "reportReason", "paymentDetails", "fssai"]) {
+      assert.equal(privateField in item, false);
+    }
+  }
+});
+
+test("cook review list includes only the approved public thumbnail and kitchen fields", async () => {
+  const food = {
+    id: "food-review", reviewType: "FOOD", rating: 5, status: "PUBLISHED", createdAt: recent,
+    subjectNameSnapshot: "Dish", customer: { name: "Customer Name" }, dish: { name: "Dish", image: "https://cdn.foodimages.com/dish.jpg" },
+    order: { orderNumber: "TB-FOOD", status: "DELIVERED", cook: { businessName: "Food Kitchen", profileImage: "https://cdn.foodimages.com/kitchen.jpg", phone: "private" } },
+  };
+  const event = {
+    id: "event-review", reviewType: "EXPERIENCE", rating: 4, status: "PUBLISHED", createdAt: recent,
+    subjectNameSnapshot: "Workshop", customer: { name: "Another Customer" },
+    experienceBooking: { id: "booking-1", status: "COMPLETED", experience: { image: null, photos: ["https://cdn.eventimages.com/poster.jpg"], cook: { businessName: "Event Kitchen", profileImage: "https://cdn.eventimages.com/kitchen.jpg", email: "private" } } },
+  };
+  const { database } = makeDb();
+  database.review.findMany = async ({ select }) => {
+    assert.equal(select.dish.select.image, true);
+    assert.equal(select.order.select.cook.select.profileImage, true);
+    assert.equal(select.experienceBooking.select.experience.select.photos, true);
+    return [food, event];
+  };
+  database.review.count = async () => 2;
+
+  const result = await createReviewsService(database, { now: () => now }).listForCook("cook-1");
+  assert.deepEqual(
+    [result.items[0].dishImageUrl, result.items[0].experienceImageUrl, result.items[0].kitchenName, result.items[0].kitchenPhotoUrl],
+    ["https://cdn.foodimages.com/dish.jpg", null, "Food Kitchen", "https://cdn.foodimages.com/kitchen.jpg"],
+  );
+  assert.deepEqual(
+    [result.items[1].dishImageUrl, result.items[1].experienceImageUrl, result.items[1].kitchenName, result.items[1].kitchenPhotoUrl],
+    [null, "https://cdn.eventimages.com/poster.jpg", "Event Kitchen", "https://cdn.eventimages.com/kitchen.jpg"],
+  );
+  assert.equal("phone" in result.items[0], false);
+  assert.equal("email" in result.items[1], false);
+  assert.equal("image" in result.items[0].dish, false);
+  assert.equal("cook" in result.items[0].order, false);
+  assert.equal("experience" in result.items[1].experienceBooking, false);
+});
+
+test("pending review public fields are null when image URLs or kitchen names are invalid", async () => {
+  const { database } = makeDb();
+  database.orderItem.findMany = async () => [foodItem({
+    dish: { id: "dish-1", name: "Dish", image: "http://images.example.com/dish.jpg" },
+    order: { ...foodItem().order, cook: { businessName: "  \u0001 ", profileImage: "https://127.0.0.1/kitchen.jpg" } },
+  })];
+  database.experienceBooking.findMany = async () => [];
+
+  const result = await createReviewsService(database, { now: () => now }).listPending("customer-1", { page: 1, limit: 50 });
+  assert.deepEqual([
+    result.items[0].dishImageUrl, result.items[0].experienceImageUrl, result.items[0].kitchenName, result.items[0].kitchenPhotoUrl,
+  ], [null, null, null, null]);
+});
+
+test("customer submitted review fields include validated public media without exposing moderation or account data", async () => {
+  const review = {
+    id: "review-1", reviewType: "FOOD", rating: 4, comment: "Good", status: "PUBLISHED",
+    subjectNameSnapshot: "Saved dish", cookNameSnapshot: "Cook snapshot", cookReply: "Thanks", cookRepliedAt: recent,
+    createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000), dish: { name: "Dish", image: "https://images.example.com/dish.jpg" },
+    cook: { businessName: "Kitchen", profileImage: "https://images.example.com/kitchen.jpg", email: "private" },
+    isReported: true, reportReason: "private moderation data", customer: { email: "private" },
+  };
+  const { database } = makeDb({ initialMine: [review] });
+  database.review.findMany = async ({ select }) => {
+    assert.equal(select.dish.select.image, true);
+    assert.equal(select.cook.select.profileImage, true);
+    assert.equal(select.isReported, undefined);
+    assert.equal(select.reportReason, undefined);
+    assert.equal(select.customer, undefined);
+    return [review];
+  };
+
+  const result = await createReviewsService(database, { now: () => now }).listMine("customer-1", { page: 1, limit: 50 });
+  assert.deepEqual([
+    result.items[0].dishImageUrl, result.items[0].experienceImageUrl, result.items[0].kitchenName, result.items[0].kitchenPhotoUrl,
+  ], ["https://images.example.com/dish.jpg", null, "Kitchen", "https://images.example.com/kitchen.jpg"]);
+  assert.equal(result.items[0].cookName, "Cook snapshot");
+  assert.equal(result.items[0].cookReply, "Thanks");
+  assert.equal(result.items[0].editable, true);
+  for (const privateField of ["email", "phone", "address", "isReported", "reportReason", "customer"]) {
+    assert.equal(privateField in result.items[0], false);
+  }
+});
+
+test("submitted event reviews use the Experience image fallback and null invalid or unavailable public fields", async () => {
+  const reviews = [
+    {
+      id: "event-review", reviewType: "EXPERIENCE", rating: 5, comment: null, status: "HIDDEN",
+      subjectNameSnapshot: "Cooking class", cookNameSnapshot: "Legacy cook name", cookReply: null,
+      createdAt: recent, experienceBooking: { experience: { image: "", photos: ["https://images.example.com/event.jpg"] } },
+      cook: { businessName: "Kitchen", profileImage: "http://images.example.com/private.jpg", phone: "private" },
+      isReported: true, reportReason: "private",
+    },
+    {
+      id: "invalid-review", reviewType: "FOOD", rating: 3, status: "REMOVED", createdAt: recent,
+      dish: { name: "Dish", image: "https://localhost/dish.jpg" },
+      cook: { businessName: " \u0001 ", profileImage: null },
+    },
+  ];
+  const { database } = makeDb();
+  database.review.findMany = async ({ select }) => {
+    assert.equal(select.experienceBooking.select.experience.select.image, true);
+    assert.equal(select.experienceBooking.select.experience.select.photos, true);
+    assert.equal(select.isReported, undefined);
+    assert.equal(select.reportReason, undefined);
+    return reviews;
+  };
+
+  const result = await createReviewsService(database, { now: () => now }).listMine("customer-1", { page: 1, limit: 50 });
+  const event = result.items.find((item) => item.id === "event-review");
+  const invalid = result.items.find((item) => item.id === "invalid-review");
+  assert.deepEqual([
+    event.dishImageUrl, event.experienceImageUrl, event.kitchenName, event.kitchenPhotoUrl,
+  ], [null, "https://images.example.com/event.jpg", "Kitchen", null]);
+  assert.deepEqual([
+    invalid.dishImageUrl, invalid.experienceImageUrl, invalid.kitchenName, invalid.kitchenPhotoUrl,
+  ], [null, null, null, null]);
+  assert.equal(event.cookName, "Legacy cook name");
+  for (const item of result.items) {
+    for (const privateField of ["phone", "email", "address", "documents", "paymentDetails", "fssai", "isReported", "reportReason"]) {
+      assert.equal(privateField in item, false);
+    }
+  }
+});
+
 test("14-day delivery eligibility includes the exact boundary but excludes a delivery just before it", async () => {
   const boundary = new Date(now.getTime() - 14 * 86400000);
   const { database: eligibleDb } = makeDb({ item: foodItem({ order: { ...foodItem().order, statusHistory: [{ changedAt: boundary }] } }) });

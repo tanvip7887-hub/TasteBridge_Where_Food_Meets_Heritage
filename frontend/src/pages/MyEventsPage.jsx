@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, CalendarDays, Clock3, CreditCard, MapPin, RefreshCw, Star, Ticket, Users } from "lucide-react";
+import { AlertCircle, CalendarDays, CalendarClock, Clock3, CreditCard, Info, LoaderCircle, RefreshCw } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import eventsApi from "../api/eventsApi.js";
 import { groupBookings } from "../utils/eventBookings.js";
@@ -9,6 +9,11 @@ import { TasteBridgePayModal } from "../components/checkout/TasteBridgePayModal.
 import { DINE_PAYMENT_ATTEMPT_LIMIT, dinePaymentState, formatPaymentCountdown } from "../utils/dinePaymentState.js";
 import { dineCancellationState } from "../utils/dineCancellationState.js";
 import { createServerClock, formatIstDateTime, readServerClock } from "../utils/istDateTime.js";
+import BookingCard from "../components/bookings/BookingCard.jsx";
+import PaymentSummary from "../components/bookings/PaymentSummary.jsx";
+import Tabs from "../components/bookings/Tabs.jsx";
+import { getBookingTabItems } from "../utils/bookingPresentation.js";
+import BookingSkeleton from "../components/bookings/BookingSkeleton.jsx";
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? response;
 const statusLabel = (status) => String(status || "UNKNOWN").replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -16,14 +21,14 @@ const formatDate = formatIstDateTime;
 const BOOKINGS_PER_PAGE = 10;
 const formatPrice = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value));
 
-const CancellationAction = ({ booking, now, busy, error, notice, onRequestCancel }) => {
+const CancellationAction = ({ booking, now, busy, error, notice, onRequestCancel, isDine, isWorkshop }) => {
   const state = dineCancellationState(booking, now);
   const confirmed = booking?.status === "CONFIRMED";
   const cancellableStatus = ["PENDING", "ACCEPTED", "CONFIRMED"].includes(booking?.status);
 
   if (booking?.cancellationStatus === "PENDING") {
     return (
-      <section className="mt-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5" aria-label="Cancellation request status">
+      <section className={isDine || isWorkshop ? "mt-4 space-y-2 rounded-xl border border-orange-100 bg-[#FFF8F0] p-3.5" : "mt-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5"} aria-label="Cancellation request status">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900 border border-amber-300">
             Cancellation requested · Awaiting Cook review
@@ -63,11 +68,15 @@ const CancellationAction = ({ booking, now, busy, error, notice, onRequestCancel
   return (
     <section className="mt-4 space-y-2" aria-label="Booking cancellation">
       {booking.cancellationStatus === "REJECTED" && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 font-medium">
+        <div className={isDine ? "rounded-xl border border-orange-100 bg-[#FFF8F0] p-2.5 text-xs font-medium text-gray-700" : "rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs font-medium text-amber-900"}>
           The Cook declined your previous cancellation request{booking.cancellationDecisionReason ? `: “${booking.cancellationDecisionReason}”` : "."} Your booking remains {statusLabel(booking.status).toLowerCase()}.
         </div>
       )}
       {state.eligible ? (
+        isWorkshop ? <div className="flex flex-col gap-3 rounded-xl border border-orange-100 bg-[#FFF8F0] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-start gap-2 text-sm text-gray-700"><CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#68733F]" aria-hidden="true" />{confirmed ? <>Cancel by {formatDate(state.deadline)} for a simulated full refund. No real money will be returned.</> : <>This unpaid booking can be cancelled before {formatDate(state.deadline)}. No refund is due.</>}</p>
+          <button type="button" onClick={() => onRequestCancel(booking)} disabled={busy} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-wait disabled:opacity-60 sm:shrink-0">{busy ? "Submitting…" : "Cancel booking"}</button>
+        </div> : (
         <>
           {confirmed && <p className="text-sm text-gray-600">Cancel by {formatDate(state.deadline)} for a simulated full refund. No real money will be returned.</p>}
           {!confirmed && <p className="text-sm text-gray-600">This unpaid booking can be cancelled before {formatDate(state.deadline)}. No refund is due.</p>}
@@ -80,8 +89,9 @@ const CancellationAction = ({ booking, now, busy, error, notice, onRequestCancel
             {busy ? "Submitting…" : "Cancel booking"}
           </button>
         </>
+        )
       ) : (
-        <p className="text-sm text-gray-500">{state.reason || "Cancellation is not available for this booking."}</p>
+        <p className={isDine ? "flex items-start gap-2 rounded-xl bg-[#FFF8F0] px-3 py-2 text-sm text-gray-600" : isWorkshop ? "flex items-start gap-2 rounded-xl border border-orange-100 bg-[#FFF8F0] px-3 py-2 text-sm text-gray-600" : "text-sm text-gray-500"}>{isDine && <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#D2552B]" aria-hidden="true" />}{isWorkshop && <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#68733F]" aria-hidden="true" />}{state.reason || "Cancellation is not available for this booking."}</p>
       )}
       {error && <p role="alert" className="text-sm font-semibold text-red-800">{error}</p>}
       {notice && <p role="status" className="text-sm font-semibold text-emerald-800">{notice}</p>}
@@ -90,101 +100,52 @@ const CancellationAction = ({ booking, now, busy, error, notice, onRequestCancel
 };
 
 
-const BookingCard = ({ booking, group, pendingItem, onReview, paymentActions, cancellationAction }) => (
-  <article className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-bold uppercase tracking-wide text-[#D2552B]">Experience booking</p>
-        <h3 className="mt-1 text-lg font-bold text-[#2B1B12]">{booking.title || "TasteBridge event"}</h3>
-      </div>
-      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${group === "cancelled" ? "bg-red-50 text-red-700" : group === "past" ? "bg-gray-100 text-gray-700" : "bg-emerald-50 text-emerald-800"}`}>
-        {statusLabel(booking.status)} · {group === "upcoming" ? "Upcoming" : group === "past" ? "Past" : "Cancelled"}
-      </span>
-    </div>
-    <div className="mt-4 grid gap-3 text-sm text-gray-700 sm:grid-cols-2">
-      <p className="flex items-start gap-2"><CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#D2552B]" aria-hidden="true" /><span>{formatDate(booking.bookingDate)}</span></p>
-      <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#D2552B]" aria-hidden="true" /><span>{booking.venue || "Venue not available"}</span></p>
-      {Number.isInteger(booking.numberOfGuests) && <p className="flex items-start gap-2"><Users className="mt-0.5 h-4 w-4 shrink-0 text-[#D2552B]" aria-hidden="true" /><span>{booking.numberOfGuests} {booking.numberOfGuests === 1 ? "guest" : "guests"}</span></p>}
-      <p className="flex items-start gap-2"><Ticket className="mt-0.5 h-4 w-4 shrink-0 text-[#D2552B]" aria-hidden="true" /><span className="break-all">Reference: {booking.referenceId || booking.id}</span></p>
-      {Number.isInteger(booking.availableSeats) && <p className="flex items-start gap-2"><Users className="mt-0.5 h-4 w-4 shrink-0 text-[#D2552B]" aria-hidden="true" /><span>{booking.availableSeats} {booking.availableSeats === 1 ? "seat" : "seats"} available in slot</span></p>}
-    </div>
-    {booking.status === "COMPLETED" && pendingItem && onReview && (
-      <button
-        type="button"
-        onClick={() => onReview(pendingItem)}
-        className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-orange-50"
-      >
-        <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
-        Review this experience
-      </button>
-    )}
-    {booking.status === "CANCELLED" && booking.cancellationReason && (
-      <p className="mt-3 text-xs text-gray-600">
-        <span className="font-semibold text-gray-800">Cancellation reason:</span> “{booking.cancellationReason}”
-      </p>
-    )}
-    {booking.status === "EXPIRED" && booking.cancellationStatus === "EXPIRED" && (
-      <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-        The booking expired before the Cook reviewed the cancellation request. Its reserved seats have been released.
-      </p>
-    )}
-    {booking.status === "CANCELLED" && booking.refund && (
-      <section className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950" aria-label="Simulated refund result">
-        <p className="font-bold">Simulated refund {statusLabel(booking.refund.status)}</p>
-        <p>{formatPrice(booking.refund.amount)} {booking.refund.currency || "INR"} recorded against this booking.</p>
-        <p className="mt-1 text-xs font-medium">No real money was returned.</p>
-      </section>
-    )}
-    {booking.status === "CANCELLED" && booking.cancellationStatus === "APPROVED" && !booking.refund && (
-      <p className="mt-3 text-sm text-gray-600">Cancellation approved. No refund was due because no successful payment was recorded.</p>
-    )}
-    {cancellationAction}
-    {paymentActions}
-  </article>
-);
-
-const DinePaymentActions = ({ booking, now, busy, error, onOutcome, notice, onOpenModal }) => {
+const DinePaymentActions = ({ booking, now, busy, error, onOutcome, notice, onOpenModal, isDine, isWorkshop }) => {
   const state = dinePaymentState(booking, now);
   const paymentRelevant = booking.status === "ACCEPTED" || state.attempts.length > 0;
   if (!paymentRelevant) return null;
   const deadlineLabel = state.deadlineValid ? formatDate(booking.paymentExpiresAt) : "Unavailable";
   const latestAttempt = state.attempts.at(-1);
+  const content = <>
+    <div className={isDine ? "grid gap-x-5 gap-y-2 text-sm text-gray-700 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
+      <p className={isDine ? "" : "text-sm text-amber-950"}>Payment deadline: {deadlineLabel}</p>
+      {booking.totalAmount !== undefined && <p className={isDine ? "font-semibold text-[#2B1B12]" : "text-sm font-semibold text-amber-950"}>Amount: {formatPrice(booking.totalAmount)}</p>}
+      {booking.status === "ACCEPTED" && state.deadlineValid && !state.expired && <p className={`flex items-center gap-2 font-semibold ${isDine ? "text-[#2B1B12]" : "text-sm text-amber-950"}`}><Clock3 className="h-4 w-4" aria-hidden="true" />Time remaining: <span aria-live="off">{formatPaymentCountdown(state.remainingMilliseconds)}</span></p>}
+    </div>
+    {booking.status === "ACCEPTED" && state.deadlineValid && !state.clockValid && <p role="status" className="text-sm text-amber-900">Server time could not be verified, so the countdown and payment actions are unavailable. Refresh your bookings.</p>}
+    <p className={isDine ? "text-xs text-gray-600" : "text-xs text-amber-900"}>Attempts used: {state.attempts.length} / {DINE_PAYMENT_ATTEMPT_LIMIT}. Simulated payment only; no money is charged.</p>
+    {state.attempts.length > 0 && <ul className="space-y-1 text-xs text-gray-700" aria-label="Payment attempt history">{state.attempts.map((attempt) => <li key={attempt.id}>Attempt {attempt.attemptNumber}: {statusLabel(attempt.status)} · {formatDate(attempt.createdAt)}</li>)}</ul>}
+    {state.eligible && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onOpenModal ? onOpenModal(booking) : onOutcome(booking, "success")} disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-[#D2552B] px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-wait disabled:opacity-60 shadow-xs"><CreditCard className="h-4 w-4" aria-hidden="true" />Pay now</button></div>}
+    {!state.succeeded && booking.status === "ACCEPTED" && state.expired && <p className="text-sm font-semibold text-red-800">The payment window has expired. Refresh to see the server-updated booking status.</p>}
+    {!state.succeeded && state.attemptLimitReached && <p className="text-sm font-semibold text-red-800">The maximum of three payment attempts has been reached.</p>}
+    {!state.succeeded && booking.status !== "ACCEPTED" && <p className="text-sm text-gray-700">This booking is no longer waiting for payment.</p>}
+    {error && <p className="text-sm font-semibold text-red-800" role="alert">{error}</p>}
+    {notice && <p className="text-sm font-semibold text-emerald-800" role="status">{notice}</p>}
+    {booking.status === "ACCEPTED" && <p className="text-xs leading-5 text-amber-900">The server controls the original deadline and attempt limit. Your booking is not confirmed unless the server confirms simulated payment success.</p>}
+  </>;
+
+  if (isDine || isWorkshop) return <PaymentSummary amountLabel={formatPrice(booking.totalAmount ?? 0)} paid={state.succeeded} status={state.succeeded ? "Payment succeeded" : latestAttempt ? `Latest attempt: ${statusLabel(latestAttempt.status)}` : "Awaiting payment"}>{content}</PaymentSummary>;
+
   return (
-    <section className="mt-5 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="Simulated experience payment">
+    <section className={isDine ? "mt-4 space-y-2.5 rounded-xl border border-orange-100 bg-[#FFF8F0]/70 p-4 sm:p-5" : "mt-5 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4"} aria-label="Simulated experience payment">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="font-bold text-amber-950">Payment</h4>
+        <h4 className={isDine ? "font-bold text-[#2B1B12]" : "font-bold text-amber-950"}>Payment</h4>
         {state.succeeded && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Payment succeeded</span>}
         {!state.succeeded && latestAttempt && <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-700">Latest attempt: {statusLabel(latestAttempt.status)}</span>}
       </div>
-      <p className="text-sm text-amber-950">Payment deadline: {deadlineLabel}</p>
-      {booking.totalAmount !== undefined && <p className="text-sm font-semibold text-amber-950">Amount: {formatPrice(booking.totalAmount)}</p>}
-      {booking.status === "ACCEPTED" && state.deadlineValid && !state.expired && <p className="flex items-center gap-2 text-sm font-semibold text-amber-950"><Clock3 className="h-4 w-4" aria-hidden="true" />Time remaining: <span aria-live="off">{formatPaymentCountdown(state.remainingMilliseconds)}</span></p>}
-      {booking.status === "ACCEPTED" && state.deadlineValid && !state.clockValid && <p role="status" className="text-sm text-amber-900">Server time could not be verified, so the countdown and payment actions are unavailable. Refresh your bookings.</p>}
-      <p className="text-xs text-amber-900">Attempts used: {state.attempts.length} / {DINE_PAYMENT_ATTEMPT_LIMIT}. Simulated payment only; no money is charged.</p>
-      {state.attempts.length > 0 && <ul className="space-y-1 text-xs text-gray-700" aria-label="Payment attempt history">{state.attempts.map((attempt) => <li key={attempt.id}>Attempt {attempt.attemptNumber}: {statusLabel(attempt.status)} · {formatDate(attempt.createdAt)}</li>)}</ul>}
-      {state.eligible && <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => onOpenModal ? onOpenModal(booking) : onOutcome(booking, "success")} disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-[#D2552B] px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-wait disabled:opacity-60 shadow-xs">
-          <CreditCard className="h-4 w-4" aria-hidden="true" />
-          Pay now
-        </button>
-      </div>}
-      {!state.succeeded && booking.status === "ACCEPTED" && state.expired && <p className="text-sm font-semibold text-red-800">The payment window has expired. Refresh to see the server-updated booking status.</p>}
-      {!state.succeeded && state.attemptLimitReached && <p className="text-sm font-semibold text-red-800">The maximum of three payment attempts has been reached.</p>}
-      {!state.succeeded && booking.status !== "ACCEPTED" && <p className="text-sm text-gray-700">This booking is no longer waiting for payment.</p>}
-      {error && <p className="text-sm font-semibold text-red-800" role="alert">{error}</p>}
-      {notice && <p className="text-sm font-semibold text-emerald-800" role="status">{notice}</p>}
-      {booking.status === "ACCEPTED" && <p className="text-xs leading-5 text-amber-900">The server controls the original deadline and attempt limit. Your booking is not confirmed unless the server confirms simulated payment success.</p>}
+      {content}
     </section>
   );
 };
 
-const BookingSection = ({ title, group, bookings, page, onPageChange, getPendingBookingItem, onReview, now, paymentBusyId, paymentErrors, paymentNotices, onPaymentOutcome, onOpenPaymentModal, cancellationBusyId, cancellationErrors, cancellationNotices, onRequestCancel }) => {
-  if (!bookings.length) return null;
+const BookingSection = ({ title, group, bookings, page, onPageChange, getPendingBookingItem, onReview, now, paymentBusyId, paymentErrors, paymentNotices, onPaymentOutcome, onOpenPaymentModal, cancellationBusyId, cancellationErrors, cancellationNotices, onRequestCancel, isDine, isWorkshop, emptyAction }) => {
+  if (!bookings.length && !isDine && !isWorkshop) return null;
   const pageCount = Math.ceil(bookings.length / BOOKINGS_PER_PAGE);
   const visiblePage = Math.min(page, pageCount);
   const visibleBookings = bookings.slice((visiblePage - 1) * BOOKINGS_PER_PAGE, visiblePage * BOOKINGS_PER_PAGE);
-  return <section className="space-y-3" aria-label={title}>
-    <h2 className="text-lg font-bold text-[#2B1B12]">{title}<span className="ml-2 text-sm font-medium text-gray-500">({bookings.length})</span></h2>
+  return <section id={isDine ? `booking-panel-${group}` : undefined} role={isDine ? "tabpanel" : undefined} aria-labelledby={isDine ? `booking-tab-${group}` : undefined} className={isDine ? "space-y-4" : "space-y-3"} aria-label={title}>
+    {!isDine && <h2 className="text-lg font-bold text-[#2B1B12]">{title}<span className="ml-2 text-sm font-medium text-gray-500">({bookings.length})</span></h2>}
+    {!bookings.length && <div className="rounded-2xl border border-orange-100 bg-white px-5 py-12 text-center shadow-sm"><CalendarDays className="mx-auto h-9 w-9 text-orange-300" aria-hidden="true" /><h2 className="mt-3 font-bold text-[#2B1B12]">No {title.toLowerCase()} bookings</h2><p className="mt-1 text-sm text-gray-600">Bookings in this section will appear here.</p>{emptyAction}</div>}
     <div className="grid gap-4">
       {visibleBookings.map((booking) => (
         <BookingCard
@@ -193,8 +154,13 @@ const BookingSection = ({ title, group, bookings, page, onPageChange, getPending
           group={group}
           pendingItem={getPendingBookingItem ? getPendingBookingItem(booking.id) : null}
           onReview={onReview}
-          cancellationAction={<CancellationAction booking={booking} now={now} busy={cancellationBusyId === booking.id} error={cancellationErrors[booking.id]} notice={cancellationNotices[booking.id]} onRequestCancel={onRequestCancel} />}
-          paymentActions={<DinePaymentActions booking={booking} now={now} busy={paymentBusyId === booking.id} error={paymentErrors[booking.id]} notice={paymentNotices[booking.id]} onOutcome={onPaymentOutcome} onOpenModal={onOpenPaymentModal} />}
+          cancellationAction={<CancellationAction booking={booking} now={now} busy={cancellationBusyId === booking.id} error={cancellationErrors[booking.id]} notice={cancellationNotices[booking.id]} onRequestCancel={onRequestCancel} isDine={isDine} isWorkshop={isWorkshop} />}
+          paymentActions={<DinePaymentActions booking={booking} now={now} busy={paymentBusyId === booking.id} error={paymentErrors[booking.id]} notice={paymentNotices[booking.id]} onOutcome={onPaymentOutcome} onOpenModal={onOpenPaymentModal} isDine={isDine} isWorkshop={isWorkshop} />}
+          isDine={isDine}
+          isWorkshop={isWorkshop}
+          formatDate={formatDate}
+          formatPrice={formatPrice}
+          statusLabel={statusLabel}
         />
       ))}
     </div>
@@ -207,12 +173,15 @@ const BookingSection = ({ title, group, bookings, page, onPageChange, getPending
 
 export const MyEventsPage = ({ experienceType = "HOME_DINING" }) => {
   const isWorkshop = experienceType === "WORKSHOP";
+  const isDine = !isWorkshop;
   const location = useLocation();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [sectionPages, setSectionPages] = useState({ upcoming: 1, past: 1, cancelled: 1 });
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedWorkshopGroup, setSelectedWorkshopGroup] = useState(null);
   const [reviewTarget, setReviewTarget] = useState(null);
   const [now, setNow] = useState(null);
   const [paymentBusyId, setPaymentBusyId] = useState(null);
@@ -447,70 +416,68 @@ export const MyEventsPage = ({ experienceType = "HOME_DINING" }) => {
   };
 
   const groups = groupBookings(bookings);
-  const hasBookings = bookings.length > 0;
+  const firstVisibleGroup = ["upcoming", "past", "cancelled"].find((group) => groups[group].length) || "upcoming";
+  const activeGroup = isWorkshop ? selectedWorkshopGroup || firstVisibleGroup : selectedGroup || firstVisibleGroup;
+  const tabItems = [
+    { value: "upcoming", label: "Upcoming", count: groups.upcoming.length },
+    { value: "past", label: "Past", count: groups.past.length },
+    { value: "cancelled", label: "Cancelled", count: groups.cancelled.length },
+  ];
+  const activeGroupBookings = getBookingTabItems(groups, activeGroup);
   const createdDineBooking = location.state?.createdDineBooking;
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    <main className={`mx-auto w-full ${isDine ? "max-w-6xl space-y-7" : "max-w-5xl space-y-6"} px-4 py-8 sm:px-6 sm:py-10`}>
+      <header className={isDine ? "flex flex-col gap-5 rounded-2xl border border-orange-100 bg-white px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-6" : "flex flex-wrap items-end justify-between gap-3"}>
         <div>
-          <p className="text-sm font-semibold text-[#D2552B]">Customer Panel</p>
+          {isDine ? <p className="text-xs font-semibold text-gray-500"><span>Customer panel</span><span className="mx-2 text-gray-300">/</span><span className="text-[#D2552B]">Dine bookings</span></p> : <p className="text-xs font-semibold text-gray-500"><span>Customer panel</span><span className="mx-2 text-gray-300">/</span><span className="text-[#D2552B]">Workshop bookings</span></p>}
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#2B1B12]">{isWorkshop ? "Workshop Bookings" : "Dine Bookings"}</h1>
           <p className="mt-2 text-sm text-gray-600">{isWorkshop ? "Your cooking workshop bookings and updates." : "Your Home Dining bookings and updates."}</p>
         </div>
-        <Link to="/my-events" className="text-sm font-semibold text-[#D2552B] hover:underline">All event types</Link>
-        <button type="button" onClick={() => setRetry((value) => value + 1)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60">
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" /> Refresh
-        </button>
+        <div className={isDine ? "flex w-full flex-wrap items-center gap-2 sm:w-auto" : "flex items-center gap-2"}>
+          <button type="button" onClick={() => setRetry((value) => value + 1)} disabled={loading} className={isDine ? "inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#D2552B] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#b94622] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60" : "inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60"}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" /> Refresh
+          </button>
+        </div>
       </header>
 
       {createdDineBooking?.status && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900" role="status">Your booking request was submitted. Current server status: {statusLabel(createdDineBooking.status)}. The Cook must accept it before payment is available.</p>}
 
       {error && <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="flex-1">{error}</span><button type="button" onClick={() => setRetry((value) => value + 1)} className="font-bold underline">Retry</button></div>}
-      {loading ? <div role="status" className="rounded-2xl border border-orange-100 bg-white py-14 text-center text-sm text-gray-600">Loading your events…</div>
+      {loading ? isWorkshop ? <div role="status" aria-label="Loading Workshop bookings" className="space-y-4"><BookingSkeleton /><BookingSkeleton /></div> : <div role="status" className="flex min-h-48 items-center justify-center gap-3 rounded-2xl border border-orange-100 bg-white text-sm text-gray-600"><LoaderCircle className="h-5 w-5 animate-spin text-[#D2552B]" aria-hidden="true" />Loading your events…</div>
         : error ? null
-          : !hasBookings ? <section className="rounded-2xl border border-orange-100 bg-white px-6 py-14 text-center shadow-sm">
-            <CalendarDays className="mx-auto h-10 w-10 text-orange-300" aria-hidden="true" />
-            <h2 className="mt-4 text-lg font-bold text-[#2B1B12]">No {isWorkshop ? "workshop" : "Dine"} bookings yet</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">Your {isWorkshop ? "workshop" : "Home Dining"} bookings will appear here.</p>
-            <Link to="/explore" className="mt-5 inline-flex rounded-xl bg-[#D2552B] px-5 py-3 text-sm font-bold text-white hover:bg-red-700">Explore TasteBridge</Link>
-          </section>
-          : <div className="space-y-8">
+          : isDine ? <div className="space-y-5">
+            <Tabs tabs={tabItems} value={activeGroup} onChange={setSelectedGroup} label="Dine booking status" />
             <BookingSection
-              title="Upcoming"
-              group="upcoming"
-              bookings={groups.upcoming}
-              page={sectionPages.upcoming}
-              onPageChange={(value) => setSectionPages((current) => ({ ...current, upcoming: value }))}
+              title={tabItems.find((tab) => tab.value === activeGroup)?.label || "Upcoming"}
+              group={activeGroup}
+              bookings={activeGroupBookings}
+              page={sectionPages[activeGroup]}
+              onPageChange={(value) => setSectionPages((current) => ({ ...current, [activeGroup]: value }))}
               getPendingBookingItem={getPendingBookingItem}
               onReview={setReviewTarget}
               now={now} paymentBusyId={paymentBusyId} paymentErrors={paymentErrors} paymentNotices={paymentNotices} onPaymentOutcome={handlePaymentOutcome}
               onOpenPaymentModal={handleOpenPaymentModal}
               cancellationBusyId={cancellationBusyId} cancellationErrors={cancellationErrors} cancellationNotices={cancellationNotices} onRequestCancel={setCancellationTarget}
+              emptyAction={<Link to="/explore" className="mt-5 inline-flex rounded-xl bg-[#D2552B] px-5 py-3 text-sm font-bold text-white transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]">Explore TasteBridge</Link>}
+              isDine
             />
+          </div>
+          : <div className="space-y-5">
+            <Tabs tabs={tabItems} value={activeGroup} onChange={setSelectedWorkshopGroup} label="Workshop booking status" />
             <BookingSection
-              title="Past"
-              group="past"
-              bookings={groups.past}
-              page={sectionPages.past}
-              onPageChange={(value) => setSectionPages((current) => ({ ...current, past: value }))}
+              title={tabItems.find((tab) => tab.value === activeGroup)?.label || "Upcoming"}
+              group={activeGroup}
+              bookings={activeGroupBookings}
+              page={sectionPages[activeGroup]}
+              onPageChange={(value) => setSectionPages((current) => ({ ...current, [activeGroup]: value }))}
               getPendingBookingItem={getPendingBookingItem}
               onReview={setReviewTarget}
               now={now} paymentBusyId={paymentBusyId} paymentErrors={paymentErrors} paymentNotices={paymentNotices} onPaymentOutcome={handlePaymentOutcome}
               onOpenPaymentModal={handleOpenPaymentModal}
               cancellationBusyId={cancellationBusyId} cancellationErrors={cancellationErrors} cancellationNotices={cancellationNotices} onRequestCancel={setCancellationTarget}
-            />
-            <BookingSection
-              title="Cancelled"
-              group="cancelled"
-              bookings={groups.cancelled}
-              page={sectionPages.cancelled}
-              onPageChange={(value) => setSectionPages((current) => ({ ...current, cancelled: value }))}
-              getPendingBookingItem={getPendingBookingItem}
-              onReview={setReviewTarget}
-              now={now} paymentBusyId={paymentBusyId} paymentErrors={paymentErrors} paymentNotices={paymentNotices} onPaymentOutcome={handlePaymentOutcome}
-              onOpenPaymentModal={handleOpenPaymentModal}
-              cancellationBusyId={cancellationBusyId} cancellationErrors={cancellationErrors} cancellationNotices={cancellationNotices} onRequestCancel={setCancellationTarget}
+              emptyAction={<Link to="/explore" className="mt-5 inline-flex rounded-xl bg-[#D2552B] px-5 py-3 text-sm font-bold text-white transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D2552B]">Explore TasteBridge</Link>}
+              isWorkshop
             />
           </div>}
 

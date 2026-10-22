@@ -18,8 +18,9 @@ test("Cook event-booking page loads real bookings and exposes retry and completi
   assert.match(page, /\{ id: "ACCEPTED", label: "Awaiting payment" \}/);
   assert.match(page, /booking\.status === "ACCEPTED"/);
   assert.match(page, /booking\.status === "PENDING"/);
-  assert.match(page, /decideBooking\(booking, "accept"\)/);
-  assert.match(page, /decideBooking\(booking, "reject"\)/);
+  assert.match(page, /onDecide=\{decideBooking\}/);
+  assert.match(page, /onDecide\(booking, "accept"\)/);
+  assert.match(page, /onDecide\(booking, "reject"\)/);
   assert.match(page, /actingIdRef\.current/);
   assert.match(page, /disabled=\{Boolean\(actingId\)\}/);
   assert.match(page, /await loadBookings\(\{ silent: true \}\)/);
@@ -76,6 +77,38 @@ test("Cook bookings page selects the type-specific list and displays Workshop bo
   assert.match(page, /booking\.cancellationStatus/);
   assert.match(page, /const matchingBookings = useMemo/);
   assert.match(page, /const totalPages =/);
+});
+
+test("Cook booking cards use the customer experience image source, safe amounts, and redesigned details", async () => {
+  const [page, bookingService] = await Promise.all([
+    read("../src/pages/cook/panel/CookBookingsPage.jsx"),
+    read("../../backend/src/modules/events/experience-bookings.service.js"),
+  ]);
+  assert.match(page, /getExperienceImage\(experience, 800, categories\)/);
+  assert.match(bookingService, /menuItems: \{ orderBy: \{ sortOrder: "asc" \}, select: \{\s*dish: \{\s*select: \{ name: true, image: true, cuisine: true \}\s*\}\s*\}\s*\}/);
+  assert.match(page, /Number\(value\)/);
+  assert.match(page, /toAmount\(booking\.numberOfGuests\)/);
+  assert.match(page, /Number\.isFinite\(amount\)/);
+  assert.match(page, /return "—"/);
+  assert.match(page, /aria-label="Copy reference"/);
+  assert.match(page, /Booking ref:/);
+  assert.match(page, /function PaymentBadge/);
+  assert.match(page, /function BookingTabs/);
+  assert.match(page, /bookings\.filter\(\(booking\) => booking\.status === tab\.id\)\.length/);
+  assert.match(page, /No booking requests yet/);
+  assert.match(bookingService, /image: true,[\s\S]*photos: true,[\s\S]*menuItems:/);
+});
+
+test("Workshop bookings use poster-safe images, separate tabs and search, and dismissible success feedback", async () => {
+  const page = await read("../src/pages/cook/panel/CookBookingsPage.jsx");
+  assert.match(page, /isWorkshop\s*\?\s*\{ src: experience\.image \|\| experience\.photos\?\.\[0\]/);
+  assert.match(page, /isWorkshop \? "bg-\[#F2ECE4\] object-contain" : "object-cover"/);
+  assert.match(page, /<h1 className="sr-only">Workshop Bookings<\/h1>/);
+  assert.match(page, /<BookingTabs activeTab=\{activeTab\} bookings=\{bookings\} onSelect=\{\(tab\) => \{ setPage\(1\); setActionSuccess\(""\); setActiveTab\(tab\); \}\} \/>/);
+  assert.match(page, /setTimeout\(\(\) => setActionSuccess\(""\), 5000\)/);
+  assert.match(page, /aria-label="Dismiss"/);
+  assert.match(page, /booking\.amountPaid, booking\.paidAmount, succeededPayment\?\.amount/);
+  assert.match(page, /minimumFractionDigits: 2, maximumFractionDigits: 2/);
 });
 
 test("Cook bookings page enforces scheduled completion window and displays in-progress state", async () => {

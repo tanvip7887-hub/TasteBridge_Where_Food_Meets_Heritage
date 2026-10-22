@@ -127,6 +127,7 @@ export const ExplorePage = () => {
       discoveryType={filters.type}
       categoryId={filters.categoryId}
       categoryName={selectedCuisine}
+      regionalCategories={categories}
       categoriesPending={categoriesLoading && Boolean(filters.categoryId)}
       categoriesError={Boolean(categoryError && filters.categoryId)}
       onRetryCategories={retryCategories}
@@ -143,9 +144,8 @@ export const ExplorePage = () => {
         <div>
           <Link to="/" className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:text-red-800"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Home</Link>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">{selectedCategory ? `${selectedCategory.name} dishes` : "Home-cooked dishes"}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">{selectedCategory ? `Showing available dishes in ${selectedCategory.name}.` : "Discover available dishes from approved home kitchens. Browsing only — ordering is not available yet."}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">{selectedCategory ? `Showing available dishes in ${selectedCategory.name}.` : "Discover available dishes from approved home kitchens."}</p>
         </div>
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900 sm:max-w-xs">Dish availability can change. This page does not place orders.</p>
       </header>
 
       <section className="mb-7 rounded-2xl border border-orange-100 bg-white p-4 shadow-sm sm:p-5" aria-label="Dish filters">

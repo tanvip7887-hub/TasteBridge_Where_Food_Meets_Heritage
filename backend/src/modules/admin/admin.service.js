@@ -66,7 +66,8 @@ export const createAdminExperienceBookingsService = (database) => ({
           pricePerPersonSnapshot: true, totalAmountSnapshot: true, status: true,
           cancellationRequestedAt: true, cancellationReason: true, cancellationStatus: true,
           cancellationDecisionReason: true, cancellationDecidedAt: true, createdAt: true,
-          experience: { select: { id: true, type: true, title: true, location: true,
+          experience: { select: { id: true, type: true, title: true, theme: true, cuisine: true, location: true, image: true, photos: true, pricePerPerson: true,
+            menuItems: { orderBy: { sortOrder: "asc" }, select: { dish: { select: { name: true, image: true, cuisine: true } } } },
             cook: { select: { id: true, businessName: true, user: { select: { name: true } } } } },
           },
           customer: { select: { id: true, name: true, email: true } },
@@ -499,6 +500,10 @@ export const adminService = {
         include: {
           customer: { select: { name: true, email: true } },
           cook: { select: { businessName: true } },
+          items: {
+            orderBy: { createdAt: "asc" },
+            select: { name: true, dishImage: true, dish: { select: { image: true } } },
+          },
         },
       }),
       prisma.verificationDocument.findMany({
@@ -688,7 +693,22 @@ export const adminService = {
         take: Number(limit),
         orderBy: { createdAt: "desc" },
         include: {
-          user: { select: { id: true, name: true, email: true, phone: true, status: true, createdAt: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              status: true,
+              createdAt: true,
+              verificationDocuments: {
+                where: { documentType: "OTHER", mimeType: { startsWith: "image/" }, verificationStatus: "APPROVED" },
+                select: { id: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+          },
           _count: { select: { orders: true } },
         },
       }),
@@ -696,7 +716,12 @@ export const adminService = {
     ]);
 
     return {
-      agents,
+      agents: agents.map((agent) => {
+        const profilePhotoDocumentId = agent.user?.verificationDocuments?.[0]?.id || null;
+        const user = agent.user ? { ...agent.user } : null;
+        if (user) delete user.verificationDocuments;
+        return { ...agent, user, profilePhotoDocumentId };
+      }),
       pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / Number(limit)) },
     };
   },
@@ -867,7 +892,7 @@ export const adminService = {
         take: Number(limit),
         orderBy: { createdAt: "desc" },
         include: {
-          cook: { select: { id: true, businessName: true, user: { select: { name: true } } } },
+          cook: { select: { id: true, businessName: true, profileImage: true, user: { select: { name: true } } } },
           category: { select: { id: true, name: true } },
           story: { select: { whoTaught: true, storyText: true, culturalSignificance: true, occasion: true } },
         },
@@ -959,8 +984,13 @@ export const adminService = {
         orderBy: { createdAt: "desc" },
         include: {
           customer: { select: { id: true, name: true, email: true, phone: true } },
-          cook: { select: { id: true, businessName: true, user: { select: { name: true } } } },
+          cook: { select: { id: true, businessName: true, profileImage: true, user: { select: { name: true } } } },
           deliveryAgent: { select: { id: true, user: { select: { name: true, phone: true } } } },
+          items: {
+            take: 1,
+            orderBy: { createdAt: "asc" },
+            select: { name: true, quantity: true, dishImage: true, dish: { select: { image: true } } },
+          },
           _count: { select: { items: true } },
         },
       }),
@@ -1012,6 +1042,12 @@ export const adminService = {
         createdAt: true,
         customer: { select: { name: true } },
         cook: { select: { businessName: true } },
+        checkout: { select: { paymentMethod: true } },
+        items: {
+          take: 1,
+          orderBy: { createdAt: "asc" },
+          select: { name: true, dishImage: true, dish: { select: { image: true } } },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -1031,7 +1067,10 @@ export const adminService = {
         paidOrdersCount: paidOrders.length,
         refundedOrdersCount: orders.filter((o) => o.paymentStatus === "REFUNDED").length,
       },
-      orders: orders.slice(0, 50),
+      orders: orders.slice(0, 50).map(({ checkout, ...order }) => ({
+        ...order,
+        paymentMethod: checkout?.paymentMethod ?? null,
+      })),
     };
   },
 
@@ -1055,7 +1094,8 @@ export const adminService = {
       where,
       orderBy: { createdAt: "desc" },
       include: {
-        cook: { select: { id: true, businessName: true, profileImage: true, user: { select: { name: true } } } },
+        cook: { select: { id: true, businessName: true, user: { select: { name: true } } } },
+        menuItems: { orderBy: { sortOrder: "asc" }, include: { dish: { select: { id: true, name: true, image: true, cuisine: true } } } },
         slots: { orderBy: [{ startsAt: "asc" }, { id: "asc" }] },
         _count: { select: { bookings: true } },
       },

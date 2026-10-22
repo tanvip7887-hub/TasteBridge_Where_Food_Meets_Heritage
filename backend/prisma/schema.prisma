@@ -240,6 +240,13 @@ enum NotificationPortal {
   DELIVERY_AGENT
 }
 
+enum DeliveryOtpEmailStatus {
+  PENDING
+  QUEUED
+  SMTP_ACCEPTED
+  FAILED
+}
+
 model User {
   id                    String                 @id @default(cuid())
   name                  String
@@ -349,6 +356,7 @@ model DeliveryAgent {
   verificationStatus VerificationStatus @default(PENDING)
   isAvailable        Boolean            @default(false)
   orders             Order[]
+  deliveryCompletionOtps DeliveryCompletionOtp[]
   payoutDetails      DeliveryAgentPayoutDetails?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -706,6 +714,7 @@ model Order {
   items           OrderItem[]
   statusHistory   OrderStatusHistory[]
   reviews         Review[]
+  deliveryCompletionOtp DeliveryCompletionOtp?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -714,6 +723,27 @@ model Order {
   @@index([deliveryAgentId])
   @@index([status])
   @@index([checkoutId])
+}
+
+model DeliveryCompletionOtp {
+  id               String                 @id @default(cuid())
+  orderId          String                 @unique
+  order            Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliveryAgentId  String
+  deliveryAgent    DeliveryAgent          @relation(fields: [deliveryAgentId], references: [id], onDelete: Cascade)
+  otpHash          String
+  generationId     String                 @default(cuid())
+  expiresAt        DateTime
+  attempts         Int                    @default(0)
+  resendAllowedAt  DateTime?
+  consumedAt       DateTime?
+  emailStatus      DeliveryOtpEmailStatus @default(PENDING)
+  emailSentAt      DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([deliveryAgentId, expiresAt])
+  @@index([emailStatus, updatedAt])
 }
 
 model OrderStatusHistory {

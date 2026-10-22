@@ -22,7 +22,19 @@ const bookingInclude = {
   slot: { select: { startsAt: true, endsAt: true } },
 };
 const bookingListInclude = {
-  experience: { select: { id: true, cookId: true, type: true, title: true, location: true, durationMinutes: true } },
+  experience: { select: {
+    id: true,
+    cookId: true,
+    type: true,
+    title: true,
+    location: true,
+    durationMinutes: true,
+    image: true,
+    photos: true,
+    theme: true,
+    cuisine: true,
+    menuItems: { orderBy: { sortOrder: "asc" }, select: { dish: { select: { name: true, image: true, cuisine: true } } } },
+  } },
   customer: { select: { id: true, name: true } },
   slot: { select: { startsAt: true, endsAt: true } },
   paymentAttempts: {
